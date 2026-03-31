@@ -105,7 +105,25 @@ pub async fn run(json_mode: bool) -> Result<()> {
                 "expired" => "expired".red().to_string(),
                 _ => status.yellow().to_string(),
             };
-            format!("  {} ({}) — local token: {}", svc.cyan(), conn, status_colored)
+            let scopes_line = e["scopes"]
+                .as_array()
+                .filter(|arr| !arr.is_empty())
+                .map(|arr| {
+                    let joined = arr
+                        .iter()
+                        .filter_map(|v| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("\n    scopes: {}", joined.dimmed())
+                })
+                .unwrap_or_default();
+            format!(
+                "  {} ({}) — local token: {}{}",
+                svc.cyan(),
+                conn,
+                status_colored,
+                scopes_line
+            )
         })
         .collect();
 

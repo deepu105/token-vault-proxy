@@ -77,12 +77,15 @@ async fn initiate_connect(
     let base = crate::utils::config::auth0_base_url(&config.domain);
     let url = format!("{}/me/v1/connected-accounts/connect", base);
 
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "connection": connection,
         "redirect_uri": redirect_uri,
         "state": state,
-        "scopes": scopes,
     });
+    // Only include scopes when non-empty — the API rejects an empty array
+    if !scopes.is_empty() {
+        body["scopes"] = serde_json::json!(scopes);
+    }
 
     let response = http
         .post(&url)
@@ -138,10 +141,15 @@ pub struct ConnectFlowOptions {
 }
 
 /// Run the full Connected Accounts flow.
-/// Uses tokio::sync::oneshot for auth_session handoff to avoid race condition.
+///
+/// 1. Exchange for My Account API token
+/// 2. Start callback server (so it's ready before the browser redirects)
+/// 3. Call initiate_connect to get the connect_uri
+/// 4. Open browser to connect_uri
+/// 5. Wait for callback
+/// 6. Complete the connection
 pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<ConnectedAccount> {
     let my_account_token = get_my_account_token(&options.config, &options.refresh_token).await?;
-    let my_account_token_for_complete = my_account_token.clone();
 
     let server = CallbackServer::bind(options.port).await?;
     let redirect_uri = format!("http://127.0.0.1:{}/callback", server.port);
@@ -154,43 +162,30 @@ pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<C
     let state_bytes: Vec<u8> = (0..16).map(|_| rand::rng().random::<u8>()).collect();
     let state = URL_SAFE_NO_PAD.encode(&state_bytes);
 
-    // Deferred auth_session via oneshot (race condition fix)
-    let (auth_session_tx, auth_session_rx) = tokio::sync::oneshot::channel::<Result<String>>();
+    // Initiate connect inline so API errors propagate immediately
+    // (the callback server is already listening, so no race condition)
+    let init = initiate_connect(
+        &options.config,
+        &my_account_token,
+        &options.connection,
+        &options.scopes,
+        &redirect_uri,
+        &state,
+    )
+    .await?;
 
-    let config = options.config.clone();
-    let connection = options.connection.clone();
-    let scopes = options.scopes.clone();
-    let redir = redirect_uri.clone();
-    let st = state.clone();
-    let browser = options.browser.clone();
+    let mut connect_url = url::Url::parse(&init.connect_uri)
+        .context("Invalid connect_uri from server")?;
+    connect_url
+        .query_pairs_mut()
+        .append_pair("ticket", &init.connect_params.ticket);
 
-    tokio::spawn(async move {
-        let result = initiate_connect(&config, &my_account_token, &connection, &scopes, &redir, &st).await;
-        match result {
-            Ok(init) => {
-                let mut connect_url = match url::Url::parse(&init.connect_uri) {
-                    Ok(u) => u,
-                    Err(e) => {
-                        let _ = auth_session_tx.send(Err(anyhow::anyhow!("Invalid connect_uri: {}", e)));
-                        return;
-                    }
-                };
-                connect_url.query_pairs_mut().append_pair("ticket", &init.connect_params.ticket);
-
-                debug!("opening browser to {}", connect_url);
-                if let Some(ref b) = browser {
-                    let _ = open::with(connect_url.as_str(), b);
-                } else {
-                    let _ = open::that(connect_url.as_str());
-                }
-
-                let _ = auth_session_tx.send(Ok(init.auth_session));
-            }
-            Err(e) => {
-                let _ = auth_session_tx.send(Err(e));
-            }
-        }
-    });
+    debug!("opening browser to {}", connect_url);
+    if let Some(ref b) = options.browser {
+        open::with(connect_url.as_str(), b)?;
+    } else {
+        open::that(connect_url.as_str())?;
+    }
 
     // Wait for callback
     let callback = server.wait().await?;
@@ -199,17 +194,14 @@ pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<C
         anyhow::bail!("State mismatch — possible CSRF attack");
     }
 
-    let auth_session = auth_session_rx.await
-        .map_err(|_| anyhow::anyhow!("auth_session channel closed"))?
-        .context("Failed to initiate connect")?;
-
     complete_connect(
         &options.config,
-        &my_account_token_for_complete,
-        &auth_session,
+        &my_account_token,
+        &init.auth_session,
         &callback.code,
         &redirect_uri,
-    ).await
+    )
+    .await
 }
 
 /// List connected accounts.

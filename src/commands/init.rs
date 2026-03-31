@@ -49,10 +49,17 @@ pub async fn run(json_mode: bool) -> Result<()> {
         anyhow::bail!("Client ID is required.");
     }
 
-    let client_secret = prompt(
-        "Client Secret",
-        existing.as_ref().map(|c| c.client_secret.as_str()),
-    )?;
+    let secret_default = existing.as_ref().map(|c| c.client_secret.as_str());
+    let secret_display = secret_default.map(|_| "****");
+    let client_secret_input = prompt("Client Secret", secret_display)?;
+    let client_secret = if client_secret_input.is_empty() || client_secret_input == "****" {
+        match secret_default {
+            Some(s) => s.to_string(),
+            None => anyhow::bail!("Client Secret is required."),
+        }
+    } else {
+        client_secret_input
+    };
     if client_secret.is_empty() {
         anyhow::bail!("Client Secret is required.");
     }

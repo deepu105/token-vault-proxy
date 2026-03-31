@@ -3,6 +3,8 @@ use tracing::debug;
 
 use crate::store::types::Auth0Tokens;
 use crate::utils::config::Auth0Config;
+use crate::utils::http::{check_response, http_client};
+use crate::utils::time::now_ms;
 
 use super::oidc_config;
 
@@ -24,9 +26,7 @@ pub async fn refresh_auth0_token(
     debug!("refreshing auth0 access token");
 
     let endpoints = oidc_config::discover(&config.domain).await?;
-    let http = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
+    let http = http_client()?;
 
     let response = http
         .post(&endpoints.token_endpoint)
@@ -40,11 +40,7 @@ pub async fn refresh_auth0_token(
         .await
         .context("Token refresh request failed")?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        anyhow::bail!("Token refresh failed (HTTP {}): {}", status, body);
-    }
+    let response = check_response(response, "Token refresh failed").await?;
 
     let data: RefreshResponse = response
         .json()
@@ -52,10 +48,6 @@ pub async fn refresh_auth0_token(
         .context("Failed to parse refresh response")?;
 
     let expires_in = data.expires_in.unwrap_or(86400);
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64;
 
     debug!("auth0 access token refreshed successfully");
 
@@ -66,6 +58,6 @@ pub async fn refresh_auth0_token(
                 .unwrap_or_else(|| refresh_token.to_string()),
         ),
         id_token: data.id_token,
-        expires_at: now_ms + expires_in * 1000,
+        expires_at: now_ms() + expires_in * 1000,
     })
 }

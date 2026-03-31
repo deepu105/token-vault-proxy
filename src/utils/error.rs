@@ -5,9 +5,6 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("{message}")]
-    General { message: String },
-
-    #[error("{message}")]
     InvalidInput { message: String },
 
     #[error("{message}")]
@@ -26,7 +23,6 @@ pub enum AppError {
 impl AppError {
     pub fn exit_code(&self) -> i32 {
         match self {
-            AppError::General { .. } => EXIT_GENERAL,
             AppError::InvalidInput { .. } => EXIT_INVALID_INPUT,
             AppError::AuthRequired { .. } => EXIT_AUTH_REQUIRED,
             AppError::AuthzRequired { .. } => EXIT_AUTHZ_REQUIRED,
@@ -37,7 +33,6 @@ impl AppError {
 
     pub fn error_code(&self) -> &'static str {
         match self {
-            AppError::General { .. } => "general_error",
             AppError::InvalidInput { .. } => "invalid_input",
             AppError::AuthRequired { .. } => "auth_required",
             AppError::AuthzRequired { .. } => "authz_required",
@@ -63,7 +58,6 @@ mod tests {
 
     #[test]
     fn app_error_exit_code_mapping() {
-        assert_eq!(AppError::General { message: "x".into() }.exit_code(), 1);
         assert_eq!(AppError::InvalidInput { message: "x".into() }.exit_code(), 2);
         assert_eq!(AppError::AuthRequired { message: "x".into() }.exit_code(), 3);
         assert_eq!(AppError::AuthzRequired { message: "x".into() }.exit_code(), 4);
@@ -73,7 +67,6 @@ mod tests {
 
     #[test]
     fn app_error_error_code_strings() {
-        assert_eq!(AppError::General { message: "x".into() }.error_code(), "general_error");
         assert_eq!(AppError::InvalidInput { message: "x".into() }.error_code(), "invalid_input");
         assert_eq!(AppError::AuthRequired { message: "x".into() }.error_code(), "auth_required");
         assert_eq!(AppError::AuthzRequired { message: "x".into() }.error_code(), "authz_required");
@@ -83,7 +76,7 @@ mod tests {
 
     #[test]
     fn app_error_display_message() {
-        let err = AppError::General { message: "something broke".into() };
+        let err = AppError::ServiceError { message: "something broke".into() };
         assert_eq!(format!("{}", err), "something broke");
     }
 }

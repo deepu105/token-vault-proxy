@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use colored::Colorize;
@@ -10,6 +10,8 @@ use super::callback_server::CallbackServer;
 use super::oidc_config;
 use crate::store::types::Auth0Tokens;
 use crate::utils::config::Auth0Config;
+use crate::utils::http::{check_response, http_client};
+use crate::utils::time::now_ms;
 
 pub struct PkceFlowOptions {
     pub config: Auth0Config,
@@ -47,8 +49,6 @@ struct TokenResponse {
     refresh_token: Option<String>,
     id_token: Option<String>,
     expires_in: Option<i64>,
-    #[allow(dead_code)]
-    token_type: Option<String>,
 }
 
 /// Run the full PKCE authorization code flow:
@@ -114,13 +114,11 @@ pub async fn run_pkce_flow(options: PkceFlowOptions) -> Result<Auth0Tokens> {
     let callback = server.wait().await?;
 
     if callback.state != state {
-        bail!("State mismatch — possible CSRF attack");
+        anyhow::bail!("State mismatch — possible CSRF attack");
     }
 
     // Exchange authorization code for tokens
-    let http = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
+    let http = http_client()?;
 
     let response = http
         .post(&endpoints.token_endpoint)
@@ -136,11 +134,7 @@ pub async fn run_pkce_flow(options: PkceFlowOptions) -> Result<Auth0Tokens> {
         .await
         .context("Token exchange request failed")?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        bail!("Token exchange failed (HTTP {}): {}", status, body);
-    }
+    let response = check_response(response, "Token exchange failed").await?;
 
     let token_resp: TokenResponse = response
         .json()
@@ -148,15 +142,11 @@ pub async fn run_pkce_flow(options: PkceFlowOptions) -> Result<Auth0Tokens> {
         .context("Failed to parse token response")?;
 
     let expires_in = token_resp.expires_in.unwrap_or(86400);
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64;
 
     Ok(Auth0Tokens {
         access_token: token_resp.access_token,
         refresh_token: token_resp.refresh_token,
         id_token: token_resp.id_token,
-        expires_at: now_ms + expires_in * 1000,
+        expires_at: now_ms() + expires_in * 1000,
     })
 }

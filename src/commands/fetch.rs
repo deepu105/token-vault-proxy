@@ -6,7 +6,9 @@ use crate::store::credential_store::CredentialStore;
 use crate::store::types::ConnectionToken;
 use crate::utils::config::require_config;
 use crate::utils::error::AppError;
+use crate::utils::http::http_client;
 use crate::utils::output::output;
+use crate::utils::time::now_ms;
 
 /// Validate that a URL's hostname is in the allowed domains list.
 /// Checks exact match and wildcard subdomain matches (e.g. "*.googleapis.com").
@@ -131,16 +133,13 @@ pub async fn run(args: FetchArgs, json_mode: bool) -> Result<()> {
             let exchange_result =
                 exchange_for_connection_token(&config, refresh_token, &connection).await?;
 
-            let now_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as i64;
+            let now = now_ms();
 
             let _ = store.save_connection_token(
                 &connection,
                 &ConnectionToken {
                     access_token: exchange_result.access_token.clone(),
-                    expires_at: now_ms + exchange_result.expires_in * 1000,
+                    expires_at: now + exchange_result.expires_in * 1000,
                     scopes: exchange_result.scopes,
                 },
             );
@@ -150,9 +149,7 @@ pub async fn run(args: FetchArgs, json_mode: bool) -> Result<()> {
     };
 
     // Build request
-    let http = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
+    let http = http_client()?;
 
     let method: reqwest::Method = args
         .method

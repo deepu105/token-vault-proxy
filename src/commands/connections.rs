@@ -11,10 +11,7 @@ fn local_token_status(expires_at: Option<i64>) -> &'static str {
     match expires_at {
         None => "none",
         Some(exp) => {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as i64;
+            let now = crate::utils::time::now_ms();
             if now >= exp - EXPIRY_BUFFER_MS {
                 "expired"
             } else {
@@ -31,7 +28,7 @@ pub async fn run(json_mode: bool) -> Result<()> {
     let mut remote_accounts = None;
     let stored = store.get_config()?;
     if let Ok(config) = require_config(stored.as_ref()) {
-        if let Ok(Some(tokens)) = store.get_auth0_tokens().map(|t| t) {
+        if let Ok(Some(tokens)) = store.get_auth0_tokens() {
             if let Some(ref rt) = tokens.refresh_token {
                 match list_connected_accounts(&config, rt).await {
                     Ok(accounts) => {

@@ -2,19 +2,14 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use tracing::debug;
 
+use crate::utils::http::{check_response, http_client};
+
 /// OIDC endpoints discovered from the Auth0 domain.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct OidcEndpoints {
     pub token_endpoint: String,
     pub authorization_endpoint: String,
     pub issuer: String,
-}
-
-#[derive(Deserialize)]
-struct OidcConfiguration {
-    token_endpoint: String,
-    authorization_endpoint: String,
-    issuer: String,
 }
 
 /// Discover OIDC endpoints for the given Auth0 domain.
@@ -23,9 +18,7 @@ pub async fn discover(domain: &str) -> Result<OidcEndpoints> {
     let url = format!("{}/.well-known/openid-configuration", base);
     debug!("fetching OIDC configuration from {}", url);
 
-    let http = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
+    let http = http_client()?;
 
     let response = http
         .get(&url)
@@ -33,20 +26,10 @@ pub async fn discover(domain: &str) -> Result<OidcEndpoints> {
         .await
         .context("OIDC discovery request failed")?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        anyhow::bail!("OIDC discovery failed (HTTP {}): {}", status, body);
-    }
+    let response = check_response(response, "OIDC discovery failed").await?;
 
-    let config: OidcConfiguration = response
+    response
         .json()
         .await
-        .context("Failed to parse OIDC configuration")?;
-
-    Ok(OidcEndpoints {
-        token_endpoint: config.token_endpoint,
-        authorization_endpoint: config.authorization_endpoint,
-        issuer: config.issuer,
-    })
+        .context("Failed to parse OIDC configuration")
 }

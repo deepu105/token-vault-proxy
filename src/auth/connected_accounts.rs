@@ -1,18 +1,13 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::utils::config::Auth0Config;
+use crate::utils::http::{check_response, http_client};
 use super::callback_server::CallbackServer;
 
 const MY_ACCOUNT_SCOPES: &str = "create:me:connected_accounts read:me:connected_accounts delete:me:connected_accounts";
-
-fn http_client() -> Result<reqwest::Client> {
-    Ok(reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?)
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectedAccount {
@@ -31,13 +26,6 @@ struct ConnectInitResponse {
 #[derive(Deserialize)]
 struct ConnectParams {
     ticket: String,
-}
-
-#[derive(Deserialize)]
-struct ConnectCompleteResponse {
-    id: String,
-    connection: String,
-    scopes: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -68,11 +56,7 @@ async fn get_my_account_token(config: &Auth0Config, refresh_token: &str) -> Resu
         .await
         .context("My Account token request failed")?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        bail!("My Account token exchange failed (HTTP {}): {}", status, body);
-    }
+    let response = check_response(response, "My Account token exchange failed").await?;
 
     #[derive(Deserialize)]
     struct Resp { access_token: String }
@@ -108,11 +92,7 @@ async fn initiate_connect(
         .await
         .context("Initiate connect request failed")?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        bail!("Initiate connect failed (HTTP {}): {}", status, body);
-    }
+    let response = check_response(response, "Initiate connect failed").await?;
 
     response.json().await.context("Failed to parse initiate response")
 }
@@ -123,7 +103,7 @@ async fn complete_connect(
     auth_session: &str,
     connect_code: &str,
     redirect_uri: &str,
-) -> Result<ConnectCompleteResponse> {
+) -> Result<ConnectedAccount> {
     debug!("completing connected account link");
     let http = http_client()?;
     let base = crate::utils::config::auth0_base_url(&config.domain);
@@ -143,11 +123,7 @@ async fn complete_connect(
         .await
         .context("Complete connect request failed")?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        bail!("Complete connect failed (HTTP {}): {}", status, body);
-    }
+    let response = check_response(response, "Complete connect failed").await?;
 
     response.json().await.context("Failed to parse complete response")
 }
@@ -220,26 +196,20 @@ pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<C
     let callback = server.wait().await?;
 
     if callback.state != state {
-        bail!("State mismatch — possible CSRF attack");
+        anyhow::bail!("State mismatch — possible CSRF attack");
     }
 
     let auth_session = auth_session_rx.await
         .map_err(|_| anyhow::anyhow!("auth_session channel closed"))?
         .context("Failed to initiate connect")?;
 
-    let result = complete_connect(
+    complete_connect(
         &options.config,
         &my_account_token_for_complete,
         &auth_session,
         &callback.code,
         &redirect_uri,
-    ).await?;
-
-    Ok(ConnectedAccount {
-        id: result.id,
-        connection: result.connection,
-        scopes: result.scopes,
-    })
+    ).await
 }
 
 /// List connected accounts.
@@ -256,11 +226,7 @@ pub async fn list_connected_accounts(config: &Auth0Config, refresh_token: &str) 
         .await
         .context("List connected accounts failed")?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        bail!("List connected accounts failed (HTTP {}): {}", status, body);
-    }
+    let response = check_response(response, "List connected accounts failed").await?;
 
     let data: AccountsListResponse = response.json().await?;
     Ok(data.accounts.unwrap_or_default())
@@ -280,11 +246,7 @@ pub async fn delete_connected_account(config: &Auth0Config, refresh_token: &str,
         .await
         .context("Delete connected account failed")?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        bail!("Delete connected account failed (HTTP {}): {}", status, body);
-    }
+    check_response(response, "Delete connected account failed").await?;
 
     Ok(())
 }

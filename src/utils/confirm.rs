@@ -27,7 +27,7 @@ pub fn require_confirmation(action: &str, confirmed: bool) -> Result<(), AppErro
     io::stderr().flush().ok();
 
     let mut answer = String::new();
-    io::stdin().lock().read_line(&mut answer).map_err(|_| AppError::General {
+    io::stdin().lock().read_line(&mut answer).map_err(|_| AppError::InvalidInput {
         message: "Failed to read confirmation input.".to_string(),
     })?;
 

@@ -105,10 +105,7 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
     match exchange_for_connection_token(&config, &refresh_token, &connection).await {
         Ok(exchange_result) => {
             // Cache the token
-            let now_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as i64;
+            let now_ms = crate::utils::time::now_ms();
             let _ = store.save_connection_token(&connection, &ConnectionToken {
                 access_token: exchange_result.access_token,
                 expires_at: now_ms + exchange_result.expires_in * 1000,

@@ -47,11 +47,8 @@ pub async fn run(json_mode: bool) -> Result<()> {
         (None, None, None)
     };
 
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64;
-    let expired = now_ms >= tokens.expires_at - EXPIRY_BUFFER_MS;
+    let now = crate::utils::time::now_ms();
+    let expired = now >= tokens.expires_at - EXPIRY_BUFFER_MS;
 
     let connections = store.list_connections()?;
     let storage = resolve_storage_backend().unwrap_or_else(|_| "unknown".to_string());

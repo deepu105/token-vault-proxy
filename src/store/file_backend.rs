@@ -79,13 +79,11 @@ impl FileBackend {
         let json = serde_json::to_string_pretty(data)
             .context("failed to serialize credential data")?;
 
-        // Write to a temp file alongside the target for same-filesystem rename
+        // Write to a temp file alongside the target for same-filesystem rename.
+        // On Unix, create with mode 0o600 directly to avoid a TOCTOU window
+        // where the file briefly has default permissions.
         let temp_path = self.dir.join(".credentials.json.tmp");
-        fs::write(&temp_path, &json)
-            .with_context(|| format!("failed to write temp file {}", temp_path.display()))?;
-
-        // Set permissions before rename so the file is never world-readable
-        set_file_permissions(&temp_path)?;
+        write_with_restricted_permissions(&temp_path, json.as_bytes())?;
 
         fs::rename(&temp_path, &self.file_path)
             .with_context(|| {
@@ -193,18 +191,28 @@ impl CredentialBackend for FileBackend {
     }
 }
 
-/// Set file permissions to 0600 (owner read/write only) on Unix.
+/// Write data to a file, creating it with mode 0o600 atomically on Unix.
+/// On non-Unix platforms, falls back to regular write + post-hoc chmod.
 #[cfg(unix)]
-fn set_file_permissions(path: &Path) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-        .with_context(|| format!("failed to set permissions on {}", path.display()))
+fn write_with_restricted_permissions(path: &Path, data: &[u8]) -> Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::io::Write;
+
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .with_context(|| format!("failed to create {}", path.display()))?;
+    file.write_all(data)
+        .with_context(|| format!("failed to write {}", path.display()))
 }
 
-/// No-op on non-Unix platforms.
 #[cfg(not(unix))]
-fn set_file_permissions(_path: &Path) -> Result<()> {
-    Ok(())
+fn write_with_restricted_permissions(path: &Path, data: &[u8]) -> Result<()> {
+    fs::write(path, data)
+        .with_context(|| format!("failed to write {}", path.display()))
 }
 
 /// Set directory permissions to 0700 (owner only) on Unix.

@@ -30,19 +30,27 @@ pub struct MergeResult {
     pub missing: Vec<&'static str>,
 }
 
-/// Merge config from env vars and stored values. Env vars take precedence.
-pub fn merge_config(stored: Option<&StoredConfig>) -> MergeResult {
-    let domain = std::env::var("AUTH0_DOMAIN")
-        .ok()
+/// Merge config from explicit values and stored values. First-arg values take precedence.
+/// This is the core merge implementation. The public `merge_config` function
+/// reads env vars and delegates here.
+pub(crate) fn merge_config_pure(
+    env_domain: Option<&str>,
+    env_client_id: Option<&str>,
+    env_client_secret: Option<&str>,
+    env_audience: Option<&str>,
+    stored: Option<&StoredConfig>,
+) -> MergeResult {
+    let domain = env_domain
+        .map(|s| s.to_string())
         .or_else(|| stored.map(|s| s.domain.clone()));
-    let client_id = std::env::var("AUTH0_CLIENT_ID")
-        .ok()
+    let client_id = env_client_id
+        .map(|s| s.to_string())
         .or_else(|| stored.map(|s| s.client_id.clone()));
-    let client_secret = std::env::var("AUTH0_CLIENT_SECRET")
-        .ok()
+    let client_secret = env_client_secret
+        .map(|s| s.to_string())
         .or_else(|| stored.map(|s| s.client_secret.clone()));
-    let audience = std::env::var("AUTH0_AUDIENCE")
-        .ok()
+    let audience = env_audience
+        .map(|s| s.to_string())
         .or_else(|| stored.and_then(|s| s.audience.clone()));
 
     let mut missing = Vec::new();
@@ -63,6 +71,17 @@ pub fn merge_config(stored: Option<&StoredConfig>) -> MergeResult {
         audience,
         missing,
     }
+}
+
+/// Merge config from env vars and stored values. Env vars take precedence.
+pub fn merge_config(stored: Option<&StoredConfig>) -> MergeResult {
+    merge_config_pure(
+        std::env::var("AUTH0_DOMAIN").ok().as_deref(),
+        std::env::var("AUTH0_CLIENT_ID").ok().as_deref(),
+        std::env::var("AUTH0_CLIENT_SECRET").ok().as_deref(),
+        std::env::var("AUTH0_AUDIENCE").ok().as_deref(),
+        stored,
+    )
 }
 
 /// Load Auth0 config, returning an error if any required field is missing.
@@ -284,48 +303,6 @@ mod tests {
     }
 
     // --- Pure helpers for testing without env var mutation ---
-
-    /// Same logic as `merge_config` but accepts explicit env values instead of
-    /// reading from the process environment — safe for parallel tests.
-    fn merge_config_pure(
-        env_domain: Option<&str>,
-        env_client_id: Option<&str>,
-        env_client_secret: Option<&str>,
-        env_audience: Option<&str>,
-        stored: Option<&StoredConfig>,
-    ) -> MergeResult {
-        let domain = env_domain
-            .map(|s| s.to_string())
-            .or_else(|| stored.map(|s| s.domain.clone()));
-        let client_id = env_client_id
-            .map(|s| s.to_string())
-            .or_else(|| stored.map(|s| s.client_id.clone()));
-        let client_secret = env_client_secret
-            .map(|s| s.to_string())
-            .or_else(|| stored.map(|s| s.client_secret.clone()));
-        let audience = env_audience
-            .map(|s| s.to_string())
-            .or_else(|| stored.and_then(|s| s.audience.clone()));
-
-        let mut missing = Vec::new();
-        if domain.is_none() {
-            missing.push("AUTH0_DOMAIN");
-        }
-        if client_id.is_none() {
-            missing.push("AUTH0_CLIENT_ID");
-        }
-        if client_secret.is_none() {
-            missing.push("AUTH0_CLIENT_SECRET");
-        }
-
-        MergeResult {
-            domain,
-            client_id,
-            client_secret,
-            audience,
-            missing,
-        }
-    }
 
     /// Same as `require_config` but uses pure merge helper.
     fn require_config_pure(

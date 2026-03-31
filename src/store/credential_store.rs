@@ -159,10 +159,7 @@ impl CredentialStore {
     /// Check whether a token with the given `expires_at` timestamp is expired,
     /// applying the [`EXPIRY_BUFFER_MS`] proactive buffer.
     fn is_expired(&self, expires_at: i64) -> bool {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
+        let now = crate::utils::time::now_ms();
         now >= expires_at - EXPIRY_BUFFER_MS
     }
 
@@ -180,10 +177,7 @@ mod tests {
 
     /// Helper: current time in ms since epoch.
     fn now_ms() -> i64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as i64
+        crate::utils::time::now_ms()
     }
 
     /// Helper: build a CredentialStore backed by FileBackend in a temp dir.

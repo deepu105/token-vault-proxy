@@ -100,19 +100,32 @@ impl CallbackServer {
 
     /// Wait for the OAuth callback. The server is already accepting requests;
     /// this simply awaits the result and then shuts down.
+    /// Times out after 5 minutes to prevent indefinite hangs.
     pub async fn wait(self) -> Result<CallbackResult> {
-        let result = self
-            .rx
-            .await
-            .context("Callback channel closed without receiving a result")?;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(300),
+            self.rx,
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("OAuth callback timed out after 5 minutes. Please retry."))?
+        .context("Callback channel closed without receiving a result")?;
 
         self.handle.abort();
         Ok(result)
     }
 }
 
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
 /// Generate a simple HTML page for the callback response shown in the browser.
-pub fn html_page(title: &str, message: &str) -> String {
+pub(crate) fn html_page(title: &str, message: &str) -> String {
+    let title = html_escape(title);
+    let message = html_escape(message);
     format!(
         r#"<!DOCTYPE html>
 <html><head><title>{title}</title></head>
@@ -198,5 +211,21 @@ mod tests {
             PORT_RANGE_END
         );
         server.handle.abort();
+    }
+
+    #[test]
+    fn html_escape_encodes_special_chars() {
+        assert_eq!(html_escape("<script>alert(1)</script>"), "&lt;script&gt;alert(1)&lt;/script&gt;");
+        assert_eq!(html_escape("a & b"), "a &amp; b");
+        assert_eq!(html_escape("say \"hello\""), "say &quot;hello&quot;");
+        assert_eq!(html_escape("plain text"), "plain text");
+    }
+
+    #[test]
+    fn html_page_escapes_parameters() {
+        let page = html_page("<evil>", "a & b");
+        assert!(page.contains("&lt;evil&gt;"));
+        assert!(page.contains("a &amp; b"));
+        assert!(!page.contains("<evil>"));
     }
 }

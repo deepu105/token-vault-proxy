@@ -3,6 +3,7 @@ use tracing::debug;
 
 use crate::utils::config::Auth0Config;
 use crate::utils::error::AppError;
+use crate::utils::http::http_client;
 
 const GRANT_TYPE: &str =
     "urn:auth0:params:oauth:grant-type:token-exchange:federated-connection-access-token";
@@ -40,9 +41,7 @@ pub async fn exchange_for_connection_token(
 
     let base = crate::utils::config::auth0_base_url(&config.domain);
     let token_endpoint = format!("{}/oauth/token", base);
-    let http = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
+    let http = http_client()?;
 
     let form = [
         ("grant_type", GRANT_TYPE),

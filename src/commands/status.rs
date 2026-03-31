@@ -96,28 +96,7 @@ pub async fn run(json_mode: bool) -> Result<()> {
 
 /// Decode an ID token (JWT) to extract basic claims. Does NOT verify the signature.
 fn decode_id_token(token: &str) -> (Option<String>, Option<String>, Option<String>) {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-
-    let parts: Vec<&str> = token.split('.').collect();
-    if parts.len() < 2 {
-        return (None, None, None);
-    }
-
-    let payload = match URL_SAFE_NO_PAD.decode(parts[1]) {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            // Try with padding added
-            let padded = match parts[1].len() % 4 {
-                2 => format!("{}==", parts[1]),
-                3 => format!("{}=", parts[1]),
-                _ => parts[1].to_string(),
-            };
-            match URL_SAFE_NO_PAD.decode(&padded) {
-                Ok(bytes) => bytes,
-                Err(_) => return (None, None, None),
-            }
-        }
-    };
+    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
     #[derive(serde::Deserialize)]
     struct Claims {
@@ -126,8 +105,16 @@ fn decode_id_token(token: &str) -> (Option<String>, Option<String>, Option<Strin
         sub: Option<String>,
     }
 
-    match serde_json::from_slice::<Claims>(&payload) {
-        Ok(claims) => (claims.email, claims.name, claims.sub),
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.insecure_disable_signature_validation();
+    validation.validate_exp = false;
+    validation.validate_aud = false;
+
+    // Dummy key — signature validation is disabled
+    let key = DecodingKey::from_secret(b"");
+
+    match decode::<Claims>(token, &key, &validation) {
+        Ok(data) => (data.claims.email, data.claims.name, data.claims.sub),
         Err(_) => (None, None, None),
     }
 }

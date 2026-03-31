@@ -26,8 +26,9 @@ async fn main() {
 
     let cli = Cli::parse();
     let json_mode = is_json_mode(cli.json);
+    let confirmed = cli.is_confirmed();
 
-    match commands::dispatch(cli.command, cli.browser, cli.port, json_mode).await {
+    match commands::dispatch(cli.command, cli.browser, cli.port, json_mode, confirmed).await {
         Ok(()) => {}
         Err(err) => {
             // Check if it's an AppError with a specific exit code

@@ -14,13 +14,10 @@ anyhow = "1"
 axum = "0.8"
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
-colored = "3"
-dialoguer = "0.11"
 dirs = "6"
 jsonwebtoken = "9"
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
 open = "5"
-openidconnect = "4"
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }

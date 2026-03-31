@@ -5,9 +5,10 @@ use crate::auth::callback_server::CallbackServer;
 use crate::cli::LogoutArgs;
 use crate::store::credential_store::CredentialStore;
 use crate::utils::config::{merge_config, resolve_browser, resolve_callback_port};
+use crate::utils::confirm::require_confirmation;
 use crate::utils::output::output;
 
-pub async fn run(args: LogoutArgs, browser: Option<String>, port: Option<u16>, json_mode: bool) -> Result<()> {
+pub async fn run(args: LogoutArgs, browser: Option<String>, port: Option<u16>, json_mode: bool, confirmed: bool) -> Result<()> {
     let store = CredentialStore::from_env()?;
 
     let existing = store.get_auth0_tokens()?;
@@ -19,6 +20,8 @@ pub async fn run(args: LogoutArgs, browser: Option<String>, port: Option<u16>, j
         );
         return Ok(());
     }
+
+    require_confirmation("Logout will clear all credentials and connections", confirmed)?;
 
     // Browser logout if not --local
     if !args.local {

@@ -41,8 +41,8 @@ async fn e2e_full_happy_path() {
     assert_eq!(connections[0]["tokenStatus"], "valid");
     assert_eq!(connections[0]["remote"], true);
 
-    // Logout
-    let logout = fixture.run(&["--json", "logout", "--local"]);
+    // Logout (--yes required in non-interactive mode)
+    let logout = fixture.run(&["--json", "--yes", "logout", "--local"]);
     assert_eq!(logout.exit_code, 0);
     let json = parse_json(&logout);
     assert_eq!(json["status"], "logged_out");
@@ -189,7 +189,7 @@ async fn e2e_disconnect_flows() {
     login_and_connect_gmail(&fixture, &[]);
 
     // Local disconnect — removes cached token, but remote still exists
-    let local_disc = fixture.run(&["--json", "disconnect", "gmail"]);
+    let local_disc = fixture.run(&["--json", "--yes", "disconnect", "gmail"]);
     assert_eq!(local_disc.exit_code, 0);
     let json = parse_json(&local_disc);
     assert_eq!(json["status"], "disconnected");
@@ -207,7 +207,7 @@ async fn e2e_disconnect_flows() {
     assert_eq!(connections[0]["remote"], true);
 
     // Remote disconnect — removes from server too
-    let remote_disc = fixture.run(&["--json", "disconnect", "gmail", "--remote"]);
+    let remote_disc = fixture.run(&["--json", "--yes", "disconnect", "gmail", "--remote"]);
     assert_eq!(remote_disc.exit_code, 0);
     let json = parse_json(&remote_disc);
     assert_eq!(json["status"], "disconnected");
@@ -229,7 +229,7 @@ async fn e2e_disconnect_flows() {
 async fn e2e_remote_disconnect_requires_login() {
     let fixture = E2eFixture::setup().await;
 
-    let result = fixture.run(&["--json", "disconnect", "gmail", "--remote"]);
+    let result = fixture.run(&["--json", "--yes", "disconnect", "gmail", "--remote"]);
     assert_ne!(result.exit_code, 0);
     let combined = format!("{}{}", result.stdout, result.stderr);
     assert!(
@@ -285,7 +285,7 @@ async fn e2e_config_preserved_after_logout() {
     login_and_connect_gmail(&fixture, &[]);
 
     // Local logout
-    let logout = fixture.run(&["--json", "logout", "--local"]);
+    let logout = fixture.run(&["--json", "--yes", "logout", "--local"]);
     assert_eq!(logout.exit_code, 0);
 
     // Status should still show domain/clientId despite being logged out

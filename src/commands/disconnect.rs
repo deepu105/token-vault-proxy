@@ -5,10 +5,11 @@ use crate::cli::DisconnectArgs;
 use crate::registry::{resolve_any, Resolution};
 use crate::store::credential_store::CredentialStore;
 use crate::utils::config::require_config;
+use crate::utils::confirm::require_confirmation;
 use crate::utils::error::AppError;
 use crate::utils::output::output;
 
-pub async fn run(args: DisconnectArgs, json_mode: bool) -> Result<()> {
+pub async fn run(args: DisconnectArgs, json_mode: bool, confirmed: bool) -> Result<()> {
     let store = CredentialStore::from_env()?;
 
     // Resolve connection name
@@ -24,6 +25,11 @@ pub async fn run(args: DisconnectArgs, json_mode: bool) -> Result<()> {
     };
 
     let service_name = args.provider.to_lowercase();
+
+    require_confirmation(
+        &format!("Disconnect {}{}", service_name, if args.remote { " (local + remote)" } else { "" }),
+        confirmed,
+    )?;
     let mut remote_deleted = false;
 
     if args.remote {

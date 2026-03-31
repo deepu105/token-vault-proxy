@@ -174,7 +174,7 @@ pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<C
 
     // Generate state
     use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-    use rand::Rng;
+    use rand::RngExt;
     let state_bytes: Vec<u8> = (0..16).map(|_| rand::rng().random::<u8>()).collect();
     let state = URL_SAFE_NO_PAD.encode(&state_bytes);
 

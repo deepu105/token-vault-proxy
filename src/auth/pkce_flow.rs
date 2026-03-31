@@ -22,7 +22,7 @@ pub struct PkceFlowOptions {
 }
 
 fn generate_code_verifier() -> String {
-    use rand::Rng;
+    use rand::RngExt;
     let mut rng = rand::rng();
     let bytes: Vec<u8> = (0..32).map(|_| rng.random::<u8>()).collect();
     URL_SAFE_NO_PAD.encode(&bytes)
@@ -35,7 +35,7 @@ fn generate_code_challenge(verifier: &str) -> String {
 }
 
 fn generate_state() -> String {
-    use rand::Rng;
+    use rand::RngExt;
     let mut rng = rand::rng();
     let bytes: Vec<u8> = (0..16).map(|_| rng.random::<u8>()).collect();
     URL_SAFE_NO_PAD.encode(&bytes)

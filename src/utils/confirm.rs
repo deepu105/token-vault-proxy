@@ -50,7 +50,13 @@ mod tests {
 
     #[test]
     fn non_tty_without_flag_returns_error() {
-        // In test context stdin is not a TTY, so this should error
+        // This test only works when stdin is NOT a TTY (e.g. in CI).
+        // When run from an interactive terminal, stdin.is_terminal() returns
+        // true and the function blocks waiting for input.
+        if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+            eprintln!("skipping non_tty_without_flag_returns_error: stdin is a TTY");
+            return;
+        }
         let result = require_confirmation("test action", false);
         assert!(result.is_err());
         let err = result.unwrap_err();

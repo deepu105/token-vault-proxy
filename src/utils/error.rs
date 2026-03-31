@@ -46,3 +46,44 @@ impl AppError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exit_code_constants_match_plan() {
+        assert_eq!(EXIT_GENERAL, 1);
+        assert_eq!(EXIT_INVALID_INPUT, 2);
+        assert_eq!(EXIT_AUTH_REQUIRED, 3);
+        assert_eq!(EXIT_AUTHZ_REQUIRED, 4);
+        assert_eq!(EXIT_SERVICE_ERROR, 5);
+        assert_eq!(EXIT_NETWORK_ERROR, 6);
+    }
+
+    #[test]
+    fn app_error_exit_code_mapping() {
+        assert_eq!(AppError::General { message: "x".into() }.exit_code(), 1);
+        assert_eq!(AppError::InvalidInput { message: "x".into() }.exit_code(), 2);
+        assert_eq!(AppError::AuthRequired { message: "x".into() }.exit_code(), 3);
+        assert_eq!(AppError::AuthzRequired { message: "x".into() }.exit_code(), 4);
+        assert_eq!(AppError::ServiceError { message: "x".into() }.exit_code(), 5);
+        assert_eq!(AppError::NetworkError { message: "x".into() }.exit_code(), 6);
+    }
+
+    #[test]
+    fn app_error_error_code_strings() {
+        assert_eq!(AppError::General { message: "x".into() }.error_code(), "general_error");
+        assert_eq!(AppError::InvalidInput { message: "x".into() }.error_code(), "invalid_input");
+        assert_eq!(AppError::AuthRequired { message: "x".into() }.error_code(), "auth_required");
+        assert_eq!(AppError::AuthzRequired { message: "x".into() }.error_code(), "authz_required");
+        assert_eq!(AppError::ServiceError { message: "x".into() }.error_code(), "service_error");
+        assert_eq!(AppError::NetworkError { message: "x".into() }.error_code(), "network_error");
+    }
+
+    #[test]
+    fn app_error_display_message() {
+        let err = AppError::General { message: "something broke".into() };
+        assert_eq!(format!("{}", err), "something broke");
+    }
+}

@@ -88,6 +88,16 @@ impl MockAuth0Server {
 
                 if grant_type.contains("federated-connection-access-token") {
                     let connection = get("connection");
+
+                    // Check for forced token error (test hook)
+                    let force_error_file = sd.join("e2e-force-token-error.json");
+                    if let Ok(contents) = std::fs::read_to_string(&force_error_file) {
+                        if let Ok(err_json) = serde_json::from_str::<serde_json::Value>(&contents) {
+                            let status = err_json.get("status").and_then(|v| v.as_u64()).unwrap_or(400) as u16;
+                            return ResponseTemplate::new(status).set_body_json(err_json);
+                        }
+                    }
+
                     let accounts = load_accounts(&sd);
                     let authorized = accounts.iter().any(|a| {
                         a.get("connection").and_then(|v| v.as_str()) == Some(&connection)
@@ -178,6 +188,14 @@ impl MockAuth0Server {
         Mock::given(method("GET"))
             .and(path("/me/v1/connected-accounts/accounts"))
             .respond_with(move |_req: &Request| {
+                // Check for forced error (test hook)
+                let force_error_file = sd.join("e2e-force-list-error.json");
+                if force_error_file.exists() {
+                    return ResponseTemplate::new(500).set_body_json(serde_json::json!({
+                        "error": "internal_error",
+                        "error_description": "Simulated server error",
+                    }));
+                }
                 let accounts = load_accounts(&sd);
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({
                     "accounts": accounts,
@@ -193,9 +211,16 @@ impl MockAuth0Server {
             .respond_with(move |req: &Request| {
                 let account_id = req.url.path().rsplit('/').next().unwrap_or("");
                 let mut accounts = load_accounts(&sd);
+                let original_len = accounts.len();
                 accounts.retain(|a| {
                     a.get("id").and_then(|v| v.as_str()) != Some(account_id)
                 });
+                if accounts.len() == original_len {
+                    return ResponseTemplate::new(404).set_body_json(serde_json::json!({
+                        "error": "not_found",
+                        "error_description": format!("Account {} not found", account_id),
+                    }));
+                }
                 save_accounts(&sd, &accounts);
                 ResponseTemplate::new(204)
             })
@@ -218,6 +243,62 @@ impl MockAuth0Server {
                 // Actually, the fake browser handles the callback — this just needs to return 200
                 let _ = &sd2;
                 ResponseTemplate::new(200).set_body_string("Connect page")
+            })
+            .mount(&server)
+            .await;
+
+        // --- Echo endpoint (any HTTP method) ---
+        Mock::given(path("/echo"))
+            .respond_with(|req: &Request| {
+                let method_str = req.method.to_string();
+                let auth = req
+                    .headers
+                    .get("Authorization")
+                    .map(|v| v.to_str().unwrap_or(""))
+                    .unwrap_or("")
+                    .to_string();
+                let content_type = req
+                    .headers
+                    .get("Content-Type")
+                    .map(|v| v.to_str().unwrap_or(""))
+                    .unwrap_or("")
+                    .to_string();
+                let body = String::from_utf8(req.body.clone()).unwrap_or_default();
+
+                // Collect custom headers (x-*)
+                let mut custom_headers = serde_json::Map::new();
+                for (name, value) in req.headers.iter() {
+                    let n = name.as_str().to_lowercase();
+                    if n.starts_with("x-") {
+                        if let Ok(v) = value.to_str() {
+                            custom_headers
+                                .insert(n, serde_json::Value::String(v.to_string()));
+                        }
+                    }
+                }
+
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "ok": true,
+                    "method": method_str,
+                    "authorization": auth,
+                    "content_type": content_type,
+                    "headers": custom_headers,
+                    "body": body,
+                }))
+            })
+            .mount(&server)
+            .await;
+
+        // --- Error echo endpoint (returns configurable status code) ---
+        Mock::given(path_regex(r"^/echo/status/\d+$"))
+            .respond_with(|req: &Request| {
+                let status_str = req.url.path().rsplit('/').next().unwrap_or("500");
+                let status: u16 = status_str.parse().unwrap_or(500);
+                ResponseTemplate::new(status).set_body_json(serde_json::json!({
+                    "error": true,
+                    "status": status,
+                    "message": format!("Simulated {} error", status),
+                }))
             })
             .mount(&server)
             .await;

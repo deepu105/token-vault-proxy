@@ -106,8 +106,6 @@ pub async fn run(json_mode: bool) -> Result<()> {
 
 /// Decode an ID token (JWT) to extract basic claims. Does NOT verify the signature.
 fn decode_id_token(token: &str) -> (Option<String>, Option<String>, Option<String>) {
-    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-
     #[derive(serde::Deserialize)]
     struct Claims {
         email: Option<String>,
@@ -115,15 +113,7 @@ fn decode_id_token(token: &str) -> (Option<String>, Option<String>, Option<Strin
         sub: Option<String>,
     }
 
-    let mut validation = Validation::new(Algorithm::RS256);
-    validation.insecure_disable_signature_validation();
-    validation.validate_exp = false;
-    validation.validate_aud = false;
-
-    // Dummy key — signature validation is disabled
-    let key = DecodingKey::from_secret(b"");
-
-    match decode::<Claims>(token, &key, &validation) {
+    match jsonwebtoken::dangerous::insecure_decode::<Claims>(token) {
         Ok(data) => (data.claims.email, data.claims.name, data.claims.sub),
         Err(_) => (None, None, None),
     }

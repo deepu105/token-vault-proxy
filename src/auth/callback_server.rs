@@ -122,3 +122,81 @@ pub fn html_page(title: &str, message: &str) -> String {
 </body></html>"#
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn callback_extracts_code_and_state() {
+        let server = CallbackServer::bind(None).await.unwrap();
+        let port = server.port;
+
+        let client = reqwest::Client::new();
+        let url = format!(
+            "http://127.0.0.1:{}/callback?code=test_code_123&state=test_state_456",
+            port
+        );
+        let _ = client.get(&url).send().await.unwrap();
+
+        let result = server.wait().await.unwrap();
+        assert_eq!(result.code, "test_code_123");
+        assert_eq!(result.state, "test_state_456");
+    }
+
+    #[tokio::test]
+    async fn callback_prefers_connect_code_over_code() {
+        let server = CallbackServer::bind(None).await.unwrap();
+        let port = server.port;
+
+        let client = reqwest::Client::new();
+        let url = format!(
+            "http://127.0.0.1:{}/callback?code=regular_code&connect_code=connect_789&state=s1",
+            port
+        );
+        let _ = client.get(&url).send().await.unwrap();
+
+        let result = server.wait().await.unwrap();
+        assert_eq!(result.code, "connect_789");
+        assert_eq!(result.state, "s1");
+    }
+
+    #[tokio::test]
+    async fn callback_missing_code_returns_empty() {
+        let server = CallbackServer::bind(None).await.unwrap();
+        let port = server.port;
+
+        let client = reqwest::Client::new();
+        let url = format!("http://127.0.0.1:{}/callback?state=only_state", port);
+        let _ = client.get(&url).send().await.unwrap();
+
+        let result = server.wait().await.unwrap();
+        assert_eq!(result.code, "");
+        assert_eq!(result.state, "only_state");
+    }
+
+    #[tokio::test]
+    async fn callback_binds_to_specific_port() {
+        // Find a free port
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let server = CallbackServer::bind(Some(port)).await.unwrap();
+        assert_eq!(server.port, port);
+        server.handle.abort();
+    }
+
+    #[tokio::test]
+    async fn callback_auto_selects_port_in_range() {
+        let server = CallbackServer::bind(None).await.unwrap();
+        assert!(
+            server.port >= PORT_RANGE_START && server.port <= PORT_RANGE_END,
+            "port {} should be in range {}-{}",
+            server.port,
+            PORT_RANGE_START,
+            PORT_RANGE_END
+        );
+        server.handle.abort();
+    }
+}

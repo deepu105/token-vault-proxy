@@ -1,4 +1,5 @@
 use anyhow::Result;
+use colored::Colorize;
 use std::io::{self, BufRead, Write};
 
 use crate::store::credential_store::CredentialStore;
@@ -30,7 +31,7 @@ pub async fn run(json_mode: bool) -> Result<()> {
     let store = CredentialStore::from_env()?;
     let existing = store.get_config()?;
 
-    eprintln!("Auth0 Token Vault Proxy — Setup Wizard\n");
+    eprintln!("{}", "Auth0 Token Vault Proxy — Setup Wizard\n".bold());
 
     let domain = prompt(
         "Auth0 domain",
@@ -80,7 +81,7 @@ pub async fn run(json_mode: bool) -> Result<()> {
             "domain": domain,
             "clientId": client_id,
         }),
-        "Configuration saved! Run `tv-proxy login` to authenticate.",
+        &format!("{} Configuration saved! Run `tv-proxy login` to authenticate.", "✓".green()),
         json_mode,
     );
 

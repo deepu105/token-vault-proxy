@@ -1,4 +1,5 @@
 use anyhow::Result;
+use colored::Colorize;
 use tracing::debug;
 
 use crate::auth::callback_server::CallbackServer;
@@ -40,7 +41,7 @@ pub async fn run(args: LogoutArgs, browser: Option<String>, port: Option<u16>, j
 
     output(
         serde_json::json!({ "status": "logged_out" }),
-        "Logged out. All credentials and connections have been removed.",
+        &format!("{} Logged out. All credentials and connections have been removed.", "✓".green()),
         json_mode,
     );
 

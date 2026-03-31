@@ -1,6 +1,7 @@
 use anyhow::{bail, Context, Result};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use colored::Colorize;
 use sha2::{Digest, Sha256};
 use tracing::debug;
 use url::Url;
@@ -102,7 +103,7 @@ pub async fn run_pkce_flow(options: PkceFlowOptions) -> Result<Auth0Tokens> {
 
     // Open browser
     debug!("opening browser to {}", auth_url);
-    eprintln!("Opening browser for authorization...");
+    eprintln!("{}", "Opening browser for authorization...".dimmed());
     if let Some(ref browser) = options.browser {
         open::with(auth_url.as_str(), browser)?;
     } else {

@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -169,7 +170,7 @@ pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<C
     let server = CallbackServer::bind(options.port).await?;
     let redirect_uri = format!("http://127.0.0.1:{}/callback", server.port);
     debug!("callback server listening on port {}", server.port);
-    eprintln!("Redirect server listening on http://127.0.0.1:{}", server.port);
+    eprintln!("{}", format!("Redirect server listening on http://127.0.0.1:{}", server.port).dimmed());
 
     // Generate state
     use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};

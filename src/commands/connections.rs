@@ -1,4 +1,5 @@
 use anyhow::Result;
+use colored::Colorize;
 use tracing::debug;
 
 use crate::auth::connected_accounts::list_connected_accounts;
@@ -84,16 +85,16 @@ pub async fn run(json_mode: bool) -> Result<()> {
     if entries.is_empty() {
         output(
             serde_json::json!({ "connections": [] }),
-            "No services connected. Use `tv-proxy connect <service>` to connect one.",
+            &format!("{}", "No services connected. Use `tv-proxy connect <service>` to connect one.".dimmed()),
             json_mode,
         );
         return Ok(());
     }
 
     let heading = if remote_accounts.is_some() {
-        "Connected services:"
+        "Connected services:".bold().to_string()
     } else {
-        "Connected services (local only):"
+        "Connected services (local only):".bold().to_string()
     };
 
     let human_lines: Vec<String> = entries
@@ -102,7 +103,12 @@ pub async fn run(json_mode: bool) -> Result<()> {
             let svc = e["service"].as_str().unwrap_or("unknown");
             let conn = e["connection"].as_str().unwrap_or("");
             let status = e["tokenStatus"].as_str().unwrap_or("unknown");
-            format!("  {} ({}) — local token: {}", svc, conn, status)
+            let status_colored = match status {
+                "valid" => "valid".green().to_string(),
+                "expired" => "expired".red().to_string(),
+                _ => status.yellow().to_string(),
+            };
+            format!("  {} ({}) — local token: {}", svc.cyan(), conn, status_colored)
         })
         .collect();
 

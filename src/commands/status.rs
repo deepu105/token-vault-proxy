@@ -1,4 +1,5 @@
 use anyhow::Result;
+use colored::Colorize;
 
 use crate::store::credential_store::{CredentialStore, EXPIRY_BUFFER_MS};
 use crate::utils::config::{merge_config, resolve_storage_backend};
@@ -18,7 +19,9 @@ pub async fn run(json_mode: bool) -> Result<()> {
                 "clientId": merged.client_id,
             }),
             &format!(
-                "Not logged in. Run `tv-proxy login` to authenticate.{}{}",
+                "{}{}{}{}",
+                "Not logged in.".yellow(),
+                " Run `tv-proxy login` to authenticate.",
                 merged
                     .domain
                     .as_ref()
@@ -74,19 +77,26 @@ pub async fn run(json_mode: bool) -> Result<()> {
     });
 
     let conn_line = if connections.is_empty() {
-        "  No services connected".to_string()
+        format!("  {}", "No services connected".dimmed())
     } else {
-        format!("  Connected: {}", connections.join(", "))
+        format!("  Connected: {}", connections.join(", ").cyan())
+    };
+
+    let session_display = if expired {
+        "expired".red().to_string()
+    } else {
+        "active".green().to_string()
     };
 
     let human = format!(
-        "Auth0 Token Vault Status\n\n  Domain:    {}\n  Client ID: {}\n  User:      {}\n  Email:     {}\n  Storage:   {}\n  Session:   {}\n\n{}",
+        "{}\n\n  Domain:    {}\n  Client ID: {}\n  User:      {}\n  Email:     {}\n  Storage:   {}\n  Session:   {}\n\n{}",
+        "Auth0 Token Vault Status".bold(),
         merged.domain.as_deref().unwrap_or("n/a"),
         merged.client_id.as_deref().unwrap_or("n/a"),
         display_name,
         email.as_deref().unwrap_or("n/a"),
         storage,
-        if expired { "expired" } else { "active" },
+        session_display,
         conn_line,
     );
 
@@ -116,5 +126,60 @@ fn decode_id_token(token: &str) -> (Option<String>, Option<String>, Option<Strin
     match decode::<Claims>(token, &key, &validation) {
         Ok(data) => (data.claims.email, data.claims.name, data.claims.sub),
         Err(_) => (None, None, None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_id_token_extracts_claims() {
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        use base64::Engine;
+
+        let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(
+            r#"{"sub":"auth0|user123","email":"test@example.com","name":"Test User","iss":"https://test.auth0.com/","aud":"test","exp":9999999999}"#,
+        );
+        let token = format!("{}.{}.fake-signature", header, payload);
+
+        let (email, name, sub) = decode_id_token(&token);
+        assert_eq!(email, Some("test@example.com".to_string()));
+        assert_eq!(name, Some("Test User".to_string()));
+        assert_eq!(sub, Some("auth0|user123".to_string()));
+    }
+
+    #[test]
+    fn decode_id_token_returns_none_for_invalid() {
+        let (email, name, sub) = decode_id_token("not-a-jwt");
+        assert_eq!(email, None);
+        assert_eq!(name, None);
+        assert_eq!(sub, None);
+    }
+
+    #[test]
+    fn decode_id_token_returns_none_for_empty() {
+        let (email, name, sub) = decode_id_token("");
+        assert_eq!(email, None);
+        assert_eq!(name, None);
+        assert_eq!(sub, None);
+    }
+
+    #[test]
+    fn decode_id_token_handles_partial_claims() {
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        use base64::Engine;
+
+        let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(
+            r#"{"sub":"auth0|user456","iss":"https://test.auth0.com/","aud":"test","exp":9999999999}"#,
+        );
+        let token = format!("{}.{}.fake", header, payload);
+
+        let (email, name, sub) = decode_id_token(&token);
+        assert_eq!(email, None);
+        assert_eq!(name, None);
+        assert_eq!(sub, Some("auth0|user456".to_string()));
     }
 }

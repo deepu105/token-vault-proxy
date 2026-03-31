@@ -1,4 +1,5 @@
 use anyhow::Result;
+use colored::Colorize;
 
 use crate::auth::pkce_flow::{run_pkce_flow, PkceFlowOptions};
 use crate::cli::LoginArgs;
@@ -44,13 +45,13 @@ pub async fn run(args: LoginArgs, browser: Option<String>, port: Option<u16>, js
     if reauthenticated {
         output(
             serde_json::json!({ "status": "logged_in", "reauthenticated": true }),
-            "Successfully re-authenticated!",
+            &format!("{} Successfully re-authenticated!", "✓".green()),
             json_mode,
         );
     } else {
         output(
             serde_json::json!({ "status": "logged_in" }),
-            "Successfully logged in!",
+            &format!("{} Successfully logged in!", "✓".green()),
             json_mode,
         );
     }

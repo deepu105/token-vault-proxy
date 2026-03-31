@@ -1,3 +1,4 @@
+use colored::Colorize;
 use std::io::{self, BufRead, IsTerminal, Write};
 
 use crate::utils::error::AppError;
@@ -22,7 +23,7 @@ pub fn require_confirmation(action: &str, confirmed: bool) -> Result<(), AppErro
         });
     }
 
-    eprint!("{} — are you sure? (y/N) ", action);
+    eprint!("{} — are you sure? (y/N) ", action.bold());
     io::stderr().flush().ok();
 
     let mut answer = String::new();
@@ -33,7 +34,7 @@ pub fn require_confirmation(action: &str, confirmed: bool) -> Result<(), AppErro
     if answer.trim().eq_ignore_ascii_case("y") {
         Ok(())
     } else {
-        eprintln!("Cancelled.");
+        eprintln!("{}", "Cancelled.".dimmed());
         std::process::exit(0);
     }
 }

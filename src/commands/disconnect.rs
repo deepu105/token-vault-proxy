@@ -1,4 +1,5 @@
 use anyhow::Result;
+use colored::Colorize;
 
 use crate::auth::connected_accounts::{list_connected_accounts, delete_connected_account};
 use crate::cli::DisconnectArgs;
@@ -55,7 +56,7 @@ pub async fn run(args: DisconnectArgs, json_mode: bool, confirmed: bool) -> Resu
                             let msg = e.to_string();
                             output(
                                 serde_json::json!({ "status": "warning", "message": format!("Remote disconnect failed: {}", msg) }),
-                                &format!("Warning: Remote disconnect failed — {}", msg),
+                                &format!("{} Remote disconnect failed — {}", "Warning:".yellow(), msg),
                                 json_mode,
                             );
                         }
@@ -63,7 +64,7 @@ pub async fn run(args: DisconnectArgs, json_mode: bool, confirmed: bool) -> Resu
                 } else {
                     output(
                         serde_json::json!({ "status": "warning", "message": format!("No remote connection found for {}", service_name) }),
-                        &format!("Warning: No remote connection found for {}.", service_name),
+                        &format!("{} No remote connection found for {}.", "Warning:".yellow(), service_name),
                         json_mode,
                     );
                 }
@@ -72,7 +73,7 @@ pub async fn run(args: DisconnectArgs, json_mode: bool, confirmed: bool) -> Resu
                 let msg = e.to_string();
                 output(
                     serde_json::json!({ "status": "warning", "message": format!("Remote disconnect failed: {}", msg) }),
-                    &format!("Warning: Remote disconnect failed — {}", msg),
+                    &format!("{} Remote disconnect failed — {}", "Warning:".yellow(), msg),
                     json_mode,
                 );
             }
@@ -85,13 +86,13 @@ pub async fn run(args: DisconnectArgs, json_mode: bool, confirmed: bool) -> Resu
     if remote_deleted {
         output(
             serde_json::json!({ "status": "disconnected", "service": service_name, "remote": true }),
-            &format!("Disconnected {} (local + remote).", service_name),
+            &format!("{} Disconnected {} (local + remote).", "✓".green(), service_name),
             json_mode,
         );
     } else {
         output(
             serde_json::json!({ "status": "disconnected", "service": service_name, "remote": false }),
-            &format!("Disconnected {} (local).", service_name),
+            &format!("{} Disconnected {} (local).", "✓".green(), service_name),
             json_mode,
         );
     }

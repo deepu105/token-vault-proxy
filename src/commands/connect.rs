@@ -1,4 +1,5 @@
 use anyhow::Result;
+use colored::Colorize;
 use tracing::debug;
 
 use crate::auth::connected_accounts::{run_connected_account_flow, list_connected_accounts, ConnectFlowOptions};
@@ -85,7 +86,7 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
         }
     }
 
-    eprintln!("Connecting {}... Opening browser for authorization.", service_name);
+    eprintln!("{} {}... Opening browser for authorization.", "Connecting".cyan(), service_name);
 
     let browser = resolve_browser(browser.as_deref());
     let port = resolve_callback_port(port);
@@ -116,7 +117,7 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
         }
         Err(e) => {
             let msg = e.to_string();
-            eprintln!("Warning: Token exchange failed — {}", msg);
+            eprintln!("{} Token exchange failed — {}", "Warning:".yellow(), msg);
             warning = Some(msg);
         }
     }
@@ -154,9 +155,9 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
     }
 
     let human = if let Some(ref w) = warning {
-        format!("Connected {} with warning: {}", service_name, w)
+        format!("{} Connected {} with warning: {}", "⚠".yellow(), service_name, w)
     } else {
-        format!("Successfully connected {}!", service_name)
+        format!("{} Successfully connected {}!", "✓".green(), service_name)
     };
 
     output(data, &human, json_mode);

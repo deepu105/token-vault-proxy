@@ -1,3 +1,4 @@
+use colored::Colorize;
 use serde_json::json;
 use std::io::Write;
 
@@ -33,6 +34,6 @@ pub fn output_error(code: &str, message: &str, json_mode: bool) {
         let _ = serde_json::to_writer_pretty(&mut stdout, &data);
         let _ = writeln!(stdout);
     } else {
-        eprintln!("Error: {message}");
+        eprintln!("{} {message}", "Error:".red().bold());
     }
 }

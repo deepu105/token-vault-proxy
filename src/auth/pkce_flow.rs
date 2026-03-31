@@ -8,6 +8,7 @@ use url::Url;
 
 use super::callback_server::CallbackServer;
 use super::oidc_config;
+use super::open_url;
 use crate::store::types::Auth0Tokens;
 use crate::utils::config::Auth0Config;
 use crate::utils::http::{check_response, http_client};
@@ -104,11 +105,7 @@ pub async fn run_pkce_flow(options: PkceFlowOptions) -> Result<Auth0Tokens> {
     // Open browser
     debug!("opening browser to {}", auth_url);
     eprintln!("{}", "Opening browser for authorization...".dimmed());
-    if let Some(ref browser) = options.browser {
-        open::with(auth_url.as_str(), browser)?;
-    } else {
-        open::that(auth_url.as_str())?;
-    }
+    open_url(auth_url.as_str(), options.browser.as_deref())?;
 
     // Phase 2: wait for the callback
     let callback = server.wait().await?;

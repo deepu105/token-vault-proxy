@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use super::callback_server::CallbackServer;
+use super::open_url;
 use crate::utils::config::Auth0Config;
 use crate::utils::http::{check_response, http_client};
 
@@ -197,11 +198,7 @@ pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<C
         .append_pair("ticket", &init.connect_params.ticket);
 
     debug!("opening browser to {}", connect_url);
-    if let Some(ref b) = options.browser {
-        open::with(connect_url.as_str(), b)?;
-    } else {
-        open::that(connect_url.as_str())?;
-    }
+    open_url(connect_url.as_str(), options.browser.as_deref())?;
 
     // Wait for callback
     let callback = server.wait().await?;

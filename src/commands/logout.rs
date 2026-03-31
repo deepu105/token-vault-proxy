@@ -3,6 +3,7 @@ use colored::Colorize;
 use tracing::debug;
 
 use crate::auth::callback_server::CallbackServer;
+use crate::auth::open_url;
 use crate::cli::LogoutArgs;
 use crate::store::credential_store::CredentialStore;
 use crate::utils::config::{merge_config, resolve_browser, resolve_callback_port};
@@ -77,11 +78,7 @@ async fn browser_logout(
         .append_pair("returnTo", &return_to);
 
     debug!("opening browser for logout: {}", logout_url);
-    if let Some(ref b) = browser {
-        open::with(logout_url.as_str(), b)?;
-    } else {
-        open::that(logout_url.as_str())?;
-    }
+    open_url(logout_url.as_str(), browser.as_deref())?;
 
     // Wait for the redirect back (this confirms the browser session ended)
     let _ = server.wait().await;

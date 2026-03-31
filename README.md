@@ -2,7 +2,7 @@
 
 Authenticated HTTP proxy for third-party [services](https://auth0.com/ai/docs/integrations/overview) via [Auth0 Token Vault](https://auth0.com/ai/docs/intro/token-vault). Make API calls to Gmail, Slack, GitHub, and more — from the terminal or an AI agent — with automatic OAuth token management.
 
-Unlike service-specific CLIs, `tv-proxy` is a generic authenticated fetch proxy: connect a provider once, then make authenticated requests to any allowed domain using that provider's token.
+Unlike service-specific CLIs like [Auth0 Token Vault CLI](https://github.com/deepu105/auth0-token-vault-cli), `tv-proxy` is a generic authenticated fetch proxy: connect a provider once, then make authenticated requests to any allowed domain using that provider's token.
 
 ## Auth0 Tenant Setup
 

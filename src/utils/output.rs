@@ -5,7 +5,7 @@ use std::io::Write;
 /// Whether JSON output mode is active.
 /// Resolved from --json flag or TV_PROXY_OUTPUT=json env var.
 pub fn is_json_mode(json_flag: bool) -> bool {
-    json_flag || std::env::var("TV_PROXY_OUTPUT").map_or(false, |v| v == "json")
+    json_flag || std::env::var("TV_PROXY_OUTPUT").is_ok_and(|v| v == "json")
 }
 
 /// Print command output. In JSON mode, writes structured JSON to stdout.

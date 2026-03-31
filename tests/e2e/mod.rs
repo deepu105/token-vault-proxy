@@ -1,2 +1,2 @@
-pub mod mock_server;
 pub mod fixture;
+pub mod mock_server;

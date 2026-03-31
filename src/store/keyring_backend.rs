@@ -31,6 +31,12 @@ fn settings_account(service: &str) -> String {
 /// support enumerating entries.
 pub struct KeyringBackend;
 
+impl Default for KeyringBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeyringBackend {
     pub fn new() -> Self {
         Self

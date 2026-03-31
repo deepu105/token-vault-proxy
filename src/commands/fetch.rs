@@ -1,7 +1,6 @@
-use anyhow::Result;
 use crate::auth::token_exchange::exchange_for_connection_token;
 use crate::cli::FetchArgs;
-use crate::registry::{resolve_any, Resolution, get_allowed_domains};
+use crate::registry::{get_allowed_domains, resolve_any, Resolution};
 use crate::store::credential_store::CredentialStore;
 use crate::store::types::ConnectionToken;
 use crate::utils::config::require_config;
@@ -9,6 +8,7 @@ use crate::utils::error::AppError;
 use crate::utils::http::http_client;
 use crate::utils::output::output;
 use crate::utils::time::now_ms;
+use anyhow::Result;
 
 /// Validate that a URL's hostname is in the allowed domains list.
 /// Checks exact match and wildcard subdomain matches (e.g. "*.googleapis.com").
@@ -34,9 +34,7 @@ pub async fn run(args: FetchArgs, json_mode: bool) -> Result<()> {
     // Resolve connection from service/provider name
     let resolution = resolve_any(&service_lower);
     let (connection, service_name_for_domains) = match &resolution {
-        Resolution::ProviderMatch(provider) => {
-            (provider.connection.to_string(), None)
-        }
+        Resolution::ProviderMatch(provider) => (provider.connection.to_string(), None),
         Resolution::ServiceMatch(provider, service) => {
             (provider.connection.to_string(), Some(service.name))
         }
@@ -151,13 +149,13 @@ pub async fn run(args: FetchArgs, json_mode: bool) -> Result<()> {
     // Build request
     let http = http_client()?;
 
-    let method: reqwest::Method = args
-        .method
-        .to_uppercase()
-        .parse()
-        .map_err(|_| AppError::InvalidInput {
-            message: format!("Invalid HTTP method: {}", args.method),
-        })?;
+    let method: reqwest::Method =
+        args.method
+            .to_uppercase()
+            .parse()
+            .map_err(|_| AppError::InvalidInput {
+                message: format!("Invalid HTTP method: {}", args.method),
+            })?;
 
     let mut request = http
         .request(method, parsed_url.as_str())
@@ -279,10 +277,7 @@ mod tests {
 
     #[test]
     fn domain_check_mixed_list() {
-        let domains = vec![
-            "slack.com".to_string(),
-            "*.slack.com".to_string(),
-        ];
+        let domains = vec!["slack.com".to_string(), "*.slack.com".to_string()];
         assert!(is_domain_allowed("slack.com", &domains));
         assert!(is_domain_allowed("api.slack.com", &domains));
         assert!(!is_domain_allowed("evil.slack.com.attacker.com", &domains));
@@ -295,10 +290,7 @@ mod tests {
 
     #[test]
     fn domain_check_multiple_allowed() {
-        let domains = vec![
-            "api.github.com".to_string(),
-            "api.slack.com".to_string(),
-        ];
+        let domains = vec!["api.github.com".to_string(), "api.slack.com".to_string()];
         assert!(is_domain_allowed("api.slack.com", &domains));
         assert!(is_domain_allowed("api.github.com", &domains));
         assert!(!is_domain_allowed("evil.com", &domains));

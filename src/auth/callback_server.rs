@@ -102,13 +102,12 @@ impl CallbackServer {
     /// this simply awaits the result and then shuts down.
     /// Times out after 5 minutes to prevent indefinite hangs.
     pub async fn wait(self) -> Result<CallbackResult> {
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(300),
-            self.rx,
-        )
-        .await
-        .map_err(|_| anyhow::anyhow!("OAuth callback timed out after 5 minutes. Please retry."))?
-        .context("Callback channel closed without receiving a result")?;
+        let result = tokio::time::timeout(std::time::Duration::from_secs(300), self.rx)
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!("OAuth callback timed out after 5 minutes. Please retry.")
+            })?
+            .context("Callback channel closed without receiving a result")?;
 
         self.handle.abort();
         Ok(result)
@@ -215,7 +214,10 @@ mod tests {
 
     #[test]
     fn html_escape_encodes_special_chars() {
-        assert_eq!(html_escape("<script>alert(1)</script>"), "&lt;script&gt;alert(1)&lt;/script&gt;");
+        assert_eq!(
+            html_escape("<script>alert(1)</script>"),
+            "&lt;script&gt;alert(1)&lt;/script&gt;"
+        );
         assert_eq!(html_escape("a & b"), "a &amp; b");
         assert_eq!(html_escape("say \"hello\""), "say &quot;hello&quot;");
         assert_eq!(html_escape("plain text"), "plain text");

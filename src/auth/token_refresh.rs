@@ -19,10 +19,7 @@ struct RefreshResponse {
 /// Refresh Auth0 tokens using a refresh token.
 /// If the server returns a new refresh token (rotation enabled), use it.
 /// Otherwise keep the existing refresh token.
-pub async fn refresh_auth0_token(
-    config: &Auth0Config,
-    refresh_token: &str,
-) -> Result<Auth0Tokens> {
+pub async fn refresh_auth0_token(config: &Auth0Config, refresh_token: &str) -> Result<Auth0Tokens> {
     debug!("refreshing auth0 access token");
 
     let endpoints = oidc_config::discover(&config.domain).await?;

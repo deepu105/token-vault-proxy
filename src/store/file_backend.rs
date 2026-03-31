@@ -7,9 +7,7 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use super::backend::CredentialBackend;
-use super::types::{
-    Auth0Tokens, ConnectionToken, CredentialData, ServiceSettings, StoredConfig,
-};
+use super::types::{Auth0Tokens, ConnectionToken, CredentialData, ServiceSettings, StoredConfig};
 
 const DEFAULT_DIR_NAME: &str = ".tv-proxy";
 const CREDENTIALS_FILE: &str = "credentials.json";
@@ -33,6 +31,12 @@ fn resolve_config_dir() -> PathBuf {
 pub struct FileBackend {
     dir: PathBuf,
     file_path: PathBuf,
+}
+
+impl Default for FileBackend {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FileBackend {
@@ -62,8 +66,9 @@ impl FileBackend {
                 debug!("credentials file not found, returning defaults");
                 Ok(CredentialData::default())
             }
-            Err(err) => Err(err)
-                .with_context(|| format!("failed to read {}", self.file_path.display())),
+            Err(err) => {
+                Err(err).with_context(|| format!("failed to read {}", self.file_path.display()))
+            }
         }
     }
 
@@ -76,8 +81,8 @@ impl FileBackend {
     fn persist(&self, data: &CredentialData) -> Result<()> {
         self.ensure_dir()?;
 
-        let json = serde_json::to_string_pretty(data)
-            .context("failed to serialize credential data")?;
+        let json =
+            serde_json::to_string_pretty(data).context("failed to serialize credential data")?;
 
         // Write to a temp file alongside the target for same-filesystem rename.
         // On Unix, create with mode 0o600 directly to avoid a TOCTOU window
@@ -85,14 +90,13 @@ impl FileBackend {
         let temp_path = self.dir.join(".credentials.json.tmp");
         write_with_restricted_permissions(&temp_path, json.as_bytes())?;
 
-        fs::rename(&temp_path, &self.file_path)
-            .with_context(|| {
-                format!(
-                    "failed to rename {} to {}",
-                    temp_path.display(),
-                    self.file_path.display()
-                )
-            })?;
+        fs::rename(&temp_path, &self.file_path).with_context(|| {
+            format!(
+                "failed to rename {} to {}",
+                temp_path.display(),
+                self.file_path.display()
+            )
+        })?;
 
         debug!("credentials persisted to {}", self.file_path.display());
         Ok(())
@@ -136,7 +140,8 @@ impl CredentialBackend for FileBackend {
 
     fn save_connection_token(&self, connection: &str, token: &ConnectionToken) -> Result<()> {
         let mut data = self.load()?;
-        data.connections.insert(connection.to_string(), token.clone());
+        data.connections
+            .insert(connection.to_string(), token.clone());
         self.persist(&data)
     }
 
@@ -195,8 +200,8 @@ impl CredentialBackend for FileBackend {
 /// On non-Unix platforms, falls back to regular write + post-hoc chmod.
 #[cfg(unix)]
 fn write_with_restricted_permissions(path: &Path, data: &[u8]) -> Result<()> {
-    use std::os::unix::fs::OpenOptionsExt;
     use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
 
     let mut file = fs::OpenOptions::new()
         .write(true)
@@ -211,8 +216,7 @@ fn write_with_restricted_permissions(path: &Path, data: &[u8]) -> Result<()> {
 
 #[cfg(not(unix))]
 fn write_with_restricted_permissions(path: &Path, data: &[u8]) -> Result<()> {
-    fs::write(path, data)
-        .with_context(|| format!("failed to write {}", path.display()))
+    fs::write(path, data).with_context(|| format!("failed to write {}", path.display()))
 }
 
 /// Set directory permissions to 0700 (owner only) on Unix.

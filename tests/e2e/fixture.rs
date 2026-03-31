@@ -21,10 +21,14 @@ impl E2eFixture {
         let mock = MockAuth0Server::start(temp_dir.path()).await;
 
         // Locate the fake browser script relative to the test binary
-        let fake_browser = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/e2e/fake_browser.sh");
+        let fake_browser =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/e2e/fake_browser.sh");
 
-        assert!(fake_browser.exists(), "fake_browser.sh not found at {:?}", fake_browser);
+        assert!(
+            fake_browser.exists(),
+            "fake_browser.sh not found at {:?}",
+            fake_browser
+        );
 
         Self {
             temp_dir,
@@ -61,16 +65,28 @@ impl E2eFixture {
 }
 
 pub fn parse_json(result: &CliResult) -> serde_json::Value {
-    serde_json::from_str(&result.stdout)
-        .unwrap_or_else(|e| panic!("Failed to parse JSON from stdout: {}\nstdout: {}\nstderr: {}", e, result.stdout, result.stderr))
+    serde_json::from_str(&result.stdout).unwrap_or_else(|e| {
+        panic!(
+            "Failed to parse JSON from stdout: {}\nstdout: {}\nstderr: {}",
+            e, result.stdout, result.stderr
+        )
+    })
 }
 
 /// Helper: login and assert success
 pub fn login(fixture: &E2eFixture) -> CliResult {
     let result = fixture.run(&["--json", "login"]);
-    assert_eq!(result.exit_code, 0, "login failed: stderr={}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "login failed: stderr={}",
+        result.stderr
+    );
     let json = parse_json(&result);
-    assert_eq!(json["status"], "logged_in", "unexpected login response: {}", result.stdout);
+    assert_eq!(
+        json["status"], "logged_in",
+        "unexpected login response: {}",
+        result.stdout
+    );
     result
 }
 
@@ -80,6 +96,10 @@ pub fn login_and_connect_gmail(fixture: &E2eFixture, extra_args: &[&str]) -> ser
     let mut args = vec!["--json", "connect", "gmail"];
     args.extend_from_slice(extra_args);
     let result = fixture.run(&args);
-    assert_eq!(result.exit_code, 0, "connect failed: stderr={}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "connect failed: stderr={}",
+        result.stderr
+    );
     parse_json(&result)
 }

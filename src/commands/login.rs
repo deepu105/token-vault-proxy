@@ -8,7 +8,12 @@ use crate::store::types::StoredConfig;
 use crate::utils::config::{require_config, resolve_browser, resolve_callback_port};
 use crate::utils::output::output;
 
-pub async fn run(args: LoginArgs, browser: Option<String>, port: Option<u16>, json_mode: bool) -> Result<()> {
+pub async fn run(
+    args: LoginArgs,
+    browser: Option<String>,
+    port: Option<u16>,
+    json_mode: bool,
+) -> Result<()> {
     let store = CredentialStore::from_env()?;
 
     // Resolve config from env + store

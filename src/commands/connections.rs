@@ -47,8 +47,7 @@ pub async fn run(json_mode: bool) -> Result<()> {
     if let Some(ref accounts) = remote_accounts {
         for acct in accounts {
             let local_entry = store.get_connection_entry(&acct.connection)?;
-            let token_status =
-                local_token_status(local_entry.as_ref().map(|e| e.expires_at));
+            let token_status = local_token_status(local_entry.as_ref().map(|e| e.expires_at));
 
             entries.push(serde_json::json!({
                 "connection": acct.connection,
@@ -64,10 +63,7 @@ pub async fn run(json_mode: bool) -> Result<()> {
         for conn in &connections {
             let entry = store.get_connection_entry(conn)?;
             let token_status = local_token_status(entry.as_ref().map(|e| e.expires_at));
-            let scopes: Vec<String> = entry
-                .as_ref()
-                .map(|e| e.scopes.clone())
-                .unwrap_or_default();
+            let scopes: Vec<String> = entry.as_ref().map(|e| e.scopes.clone()).unwrap_or_default();
 
             entries.push(serde_json::json!({
                 "connection": conn,
@@ -82,7 +78,10 @@ pub async fn run(json_mode: bool) -> Result<()> {
     if entries.is_empty() {
         output(
             serde_json::json!({ "connections": [] }),
-            &format!("{}", "No services connected. Use `tv-proxy connect <service>` to connect one.".dimmed()),
+            &format!(
+                "{}",
+                "No services connected. Use `tv-proxy connect <service>` to connect one.".dimmed()
+            ),
             json_mode,
         );
         return Ok(());

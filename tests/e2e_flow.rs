@@ -1,6 +1,6 @@
 mod e2e;
 
-use e2e::fixture::{parse_json, login, login_and_connect_gmail, E2eFixture};
+use e2e::fixture::{login, login_and_connect_gmail, parse_json, E2eFixture};
 
 // ---------------------------------------------------------------------------
 // Test 1: Full happy path — login → status → connect → connections → fetch → logout
@@ -35,8 +35,13 @@ async fn e2e_full_happy_path() {
     let conns = fixture.run(&["--json", "connections"]);
     assert_eq!(conns.exit_code, 0);
     let json = parse_json(&conns);
-    let connections = json["connections"].as_array().expect("connections should be array");
-    assert!(!connections.is_empty(), "should have at least one connection");
+    let connections = json["connections"]
+        .as_array()
+        .expect("connections should be array");
+    assert!(
+        !connections.is_empty(),
+        "should have at least one connection"
+    );
     assert_eq!(connections[0]["connection"], "google-oauth2");
     assert_eq!(connections[0]["tokenStatus"], "valid");
     assert_eq!(connections[0]["remote"], true);
@@ -88,13 +93,22 @@ async fn e2e_fetch_without_connect_errors() {
     login(&fixture);
 
     // Fetch gmail without connecting first — token exchange should fail
-    let result = fixture.run(&["--json", "fetch", "gmail", "https://www.googleapis.com/gmail/v1/users/me/messages"]);
+    let result = fixture.run(&[
+        "--json",
+        "fetch",
+        "gmail",
+        "https://www.googleapis.com/gmail/v1/users/me/messages",
+    ]);
     assert_ne!(result.exit_code, 0, "fetch should fail without connect");
     // Should contain an error in stdout (JSON mode) or stderr
     let combined = format!("{}{}", result.stdout, result.stderr);
     assert!(
-        combined.contains("not authorized") || combined.contains("error") || combined.contains("auth"),
-        "expected auth error, got stdout={} stderr={}", result.stdout, result.stderr
+        combined.contains("not authorized")
+            || combined.contains("error")
+            || combined.contains("auth"),
+        "expected auth error, got stdout={} stderr={}",
+        result.stdout,
+        result.stderr
     );
 }
 
@@ -126,9 +140,7 @@ async fn e2e_allowed_domains_for_fetch() {
 
     // Login and connect with allowed domains pointing at our mock server
     let mock_hostname = extract_hostname(&fixture.mock.uri());
-    let connect_json = login_and_connect_gmail(&fixture, &[
-        "--allowed-domains", &mock_hostname,
-    ]);
+    let connect_json = login_and_connect_gmail(&fixture, &["--allowed-domains", &mock_hostname]);
     assert_eq!(connect_json["status"], "connected");
     assert_eq!(connect_json["service"], "gmail");
 
@@ -138,7 +150,11 @@ async fn e2e_allowed_domains_for_fetch() {
     // Fetch to the echo endpoint on the mock server (HTTP allowed via TV_PROXY_ALLOW_HTTP)
     let echo_url = format!("{}/echo", fixture.mock.uri());
     let result = fixture.run(&["--json", "fetch", "gmail", &echo_url]);
-    assert_eq!(result.exit_code, 0, "fetch failed: stdout={} stderr={}", result.stdout, result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "fetch failed: stdout={} stderr={}",
+        result.stdout, result.stderr
+    );
     let json = parse_json(&result);
     assert_eq!(json["status"], 200);
     assert_eq!(json["body"]["ok"], true);
@@ -147,7 +163,8 @@ async fn e2e_allowed_domains_for_fetch() {
     let auth_header = json["body"]["authorization"].as_str().unwrap_or("");
     assert!(
         auth_header.starts_with("Bearer "),
-        "expected Bearer token in authorization header, got: {}", auth_header
+        "expected Bearer token in authorization header, got: {}",
+        auth_header
     );
 
     // Verify settings were saved by running connections
@@ -174,7 +191,9 @@ async fn e2e_fetch_disallowed_domain_rejected() {
     let combined = format!("{}{}", result.stdout, result.stderr);
     assert!(
         combined.contains("not in the allowed list"),
-        "expected domain rejection, got stdout={} stderr={}", result.stdout, result.stderr
+        "expected domain rejection, got stdout={} stderr={}",
+        result.stdout,
+        result.stderr
     );
 }
 
@@ -201,7 +220,10 @@ async fn e2e_disconnect_flows() {
     assert_eq!(conns.exit_code, 0);
     let json = parse_json(&conns);
     let connections = json["connections"].as_array().expect("array");
-    assert!(!connections.is_empty(), "remote connection should still exist");
+    assert!(
+        !connections.is_empty(),
+        "remote connection should still exist"
+    );
     assert_eq!(connections[0]["connection"], "google-oauth2");
     assert_eq!(connections[0]["tokenStatus"], "none");
     assert_eq!(connections[0]["remote"], true);
@@ -234,7 +256,9 @@ async fn e2e_remote_disconnect_requires_login() {
     let combined = format!("{}{}", result.stdout, result.stderr);
     assert!(
         combined.contains("Not logged in") || combined.contains("auth_required"),
-        "expected auth_required error, got stdout={} stderr={}", result.stdout, result.stderr
+        "expected auth_required error, got stdout={} stderr={}",
+        result.stdout,
+        result.stderr
     );
 }
 
@@ -252,7 +276,9 @@ async fn e2e_invalid_service_errors() {
     let combined = format!("{}{}", result.stdout, result.stderr);
     assert!(
         combined.contains("Unknown") || combined.contains("invalid"),
-        "connect: expected unknown service error, got stdout={} stderr={}", result.stdout, result.stderr
+        "connect: expected unknown service error, got stdout={} stderr={}",
+        result.stdout,
+        result.stderr
     );
 
     // Disconnect unknown service
@@ -261,16 +287,25 @@ async fn e2e_invalid_service_errors() {
     let combined = format!("{}{}", result.stdout, result.stderr);
     assert!(
         combined.contains("Unknown") || combined.contains("invalid"),
-        "disconnect: expected unknown service error, got stdout={} stderr={}", result.stdout, result.stderr
+        "disconnect: expected unknown service error, got stdout={} stderr={}",
+        result.stdout,
+        result.stderr
     );
 
     // Fetch unknown service
-    let result = fixture.run(&["--json", "fetch", "not-a-service", "https://example.com/data"]);
+    let result = fixture.run(&[
+        "--json",
+        "fetch",
+        "not-a-service",
+        "https://example.com/data",
+    ]);
     assert_ne!(result.exit_code, 0);
     let combined = format!("{}{}", result.stdout, result.stderr);
     assert!(
         combined.contains("Unknown") || combined.contains("invalid"),
-        "fetch: expected unknown service error, got stdout={} stderr={}", result.stdout, result.stderr
+        "fetch: expected unknown service error, got stdout={} stderr={}",
+        result.stdout,
+        result.stderr
     );
 }
 
@@ -319,7 +354,9 @@ async fn mount_echo_endpoint(server: &wiremock::MockServer) {
     Mock::given(method("GET"))
         .and(path("/echo"))
         .respond_with(|req: &Request| {
-            let auth = req.headers.get("Authorization")
+            let auth = req
+                .headers
+                .get("Authorization")
                 .map(|v| v.to_str().unwrap_or(""))
                 .unwrap_or("");
             ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -342,8 +379,17 @@ async fn e2e_fetch_unconnected_service_returns_exit_4() {
     login(&fixture);
 
     // Fetch gmail without connecting — mock returns access_denied (403)
-    let result = fixture.run(&["--json", "fetch", "gmail", "https://www.googleapis.com/gmail/v1/users/me/messages"]);
-    assert_eq!(result.exit_code, 4, "expected exit code 4 (authz_required), got {}: stderr={}", result.exit_code, result.stderr);
+    let result = fixture.run(&[
+        "--json",
+        "fetch",
+        "gmail",
+        "https://www.googleapis.com/gmail/v1/users/me/messages",
+    ]);
+    assert_eq!(
+        result.exit_code, 4,
+        "expected exit code 4 (authz_required), got {}: stderr={}",
+        result.exit_code, result.stderr
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +412,8 @@ async fn e2e_fetch_expired_token_returns_exit_3() {
     std::fs::write(
         fixture.mock.state_dir.join("e2e-force-token-error.json"),
         serde_json::to_string(&force_error).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Clear cached connection token so it goes to exchange
     let disconnect = fixture.run(&["--json", "--yes", "disconnect", "gmail"]);
@@ -385,15 +432,25 @@ async fn e2e_fetch_expired_token_returns_exit_3() {
     std::fs::write(
         fixture.mock.state_dir.join("e2e-force-token-error.json"),
         serde_json::to_string(&force_error).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Remove local cached connection token to force exchange
     let disc = fixture.run(&["--json", "--yes", "disconnect", "gmail"]);
     assert_eq!(disc.exit_code, 0);
 
     // Fetch should try to exchange → get invalid_grant → exit 3
-    let result = fixture.run(&["--json", "fetch", "gmail", "https://www.googleapis.com/gmail/v1/users/me/messages"]);
-    assert_eq!(result.exit_code, 3, "expected exit code 3 (auth_required), got {}: stdout={} stderr={}", result.exit_code, result.stdout, result.stderr);
+    let result = fixture.run(&[
+        "--json",
+        "fetch",
+        "gmail",
+        "https://www.googleapis.com/gmail/v1/users/me/messages",
+    ]);
+    assert_eq!(
+        result.exit_code, 3,
+        "expected exit code 3 (auth_required), got {}: stdout={} stderr={}",
+        result.exit_code, result.stdout, result.stderr
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -408,7 +465,11 @@ async fn e2e_fetch_non_2xx_returns_exit_5() {
 
     let error_url = format!("{}/echo/status/500", fixture.mock.uri());
     let result = fixture.run(&["--json", "fetch", "gmail", &error_url]);
-    assert_eq!(result.exit_code, 5, "expected exit code 5 (service_error), got {}: stdout={} stderr={}", result.exit_code, result.stdout, result.stderr);
+    assert_eq!(
+        result.exit_code, 5,
+        "expected exit code 5 (service_error), got {}: stdout={} stderr={}",
+        result.exit_code, result.stdout, result.stderr
+    );
 
     // stdout has two JSON objects (response + error); parse the first one
     let first_json: serde_json::Value = serde_json::Deserializer::from_str(&result.stdout)
@@ -431,11 +492,20 @@ async fn e2e_fetch_custom_headers() {
 
     let echo_url = format!("{}/echo", fixture.mock.uri());
     let result = fixture.run(&[
-        "--json", "fetch", "gmail", &echo_url,
-        "-H", "X-Custom-Header: test-value-123",
-        "-H", "X-Another: hello",
+        "--json",
+        "fetch",
+        "gmail",
+        &echo_url,
+        "-H",
+        "X-Custom-Header: test-value-123",
+        "-H",
+        "X-Another: hello",
     ]);
-    assert_eq!(result.exit_code, 0, "fetch failed: stdout={} stderr={}", result.stdout, result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "fetch failed: stdout={} stderr={}",
+        result.stdout, result.stderr
+    );
     let json = parse_json(&result);
     assert_eq!(json["body"]["headers"]["x-custom-header"], "test-value-123");
     assert_eq!(json["body"]["headers"]["x-another"], "hello");
@@ -453,11 +523,20 @@ async fn e2e_fetch_post_with_body() {
 
     let echo_url = format!("{}/echo", fixture.mock.uri());
     let result = fixture.run(&[
-        "--json", "fetch", "gmail", &echo_url,
-        "-X", "POST",
-        "-d", r#"{"key":"value"}"#,
+        "--json",
+        "fetch",
+        "gmail",
+        &echo_url,
+        "-X",
+        "POST",
+        "-d",
+        r#"{"key":"value"}"#,
     ]);
-    assert_eq!(result.exit_code, 0, "fetch failed: stdout={} stderr={}", result.stdout, result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "fetch failed: stdout={} stderr={}",
+        result.stdout, result.stderr
+    );
     let json = parse_json(&result);
     assert_eq!(json["body"]["method"], "POST");
     assert_eq!(json["body"]["body"], r#"{"key":"value"}"#);
@@ -479,11 +558,20 @@ async fn e2e_fetch_post_with_data_file() {
 
     let echo_url = format!("{}/echo", fixture.mock.uri());
     let result = fixture.run(&[
-        "--json", "fetch", "gmail", &echo_url,
-        "-X", "POST",
-        "--data-file", data_file.to_str().unwrap(),
+        "--json",
+        "fetch",
+        "gmail",
+        &echo_url,
+        "-X",
+        "POST",
+        "--data-file",
+        data_file.to_str().unwrap(),
     ]);
-    assert_eq!(result.exit_code, 0, "fetch failed: stdout={} stderr={}", result.stdout, result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "fetch failed: stdout={} stderr={}",
+        result.stdout, result.stderr
+    );
     let json = parse_json(&result);
     assert_eq!(json["body"]["method"], "POST");
     assert_eq!(json["body"]["body"], r#"{"from_file":true}"#);
@@ -500,13 +588,21 @@ async fn e2e_disconnect_remote_nonexistent_is_warning() {
 
     // Disconnect remote for gmail (never connected) — should succeed with warning
     let result = fixture.run(&["--json", "--yes", "disconnect", "gmail", "--remote"]);
-    assert_eq!(result.exit_code, 0, "expected exit code 0 (warning only), got {}: stderr={}", result.exit_code, result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "expected exit code 0 (warning only), got {}: stderr={}",
+        result.exit_code, result.stderr
+    );
 
     // Output should contain a warning about no remote connection
     let combined = format!("{}{}", result.stdout, result.stderr);
     assert!(
-        combined.contains("warning") || combined.contains("Warning") || combined.contains("No remote connection"),
-        "expected warning about missing remote connection, got stdout={} stderr={}", result.stdout, result.stderr
+        combined.contains("warning")
+            || combined.contains("Warning")
+            || combined.contains("No remote connection"),
+        "expected warning about missing remote connection, got stdout={} stderr={}",
+        result.stdout,
+        result.stderr
     );
 }
 
@@ -530,13 +626,21 @@ async fn e2e_connections_fallback_to_local() {
     std::fs::write(
         fixture.mock.state_dir.join("e2e-force-list-error.json"),
         "trigger",
-    ).unwrap();
+    )
+    .unwrap();
 
     // Connections should fall back to local data
     let conns = fixture.run(&["--json", "connections"]);
-    assert_eq!(conns.exit_code, 0, "connections should succeed even when remote fails: stderr={}", conns.stderr);
+    assert_eq!(
+        conns.exit_code, 0,
+        "connections should succeed even when remote fails: stderr={}",
+        conns.stderr
+    );
     let json = parse_json(&conns);
     let connections = json["connections"].as_array().expect("array");
     // Should still have at least the locally cached connection
-    assert!(!connections.is_empty(), "should have local connections as fallback");
+    assert!(
+        !connections.is_empty(),
+        "should have local connections as fallback"
+    );
 }

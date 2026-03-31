@@ -15,8 +15,7 @@ pub struct Auth0Config {
 /// directly (useful for testing against a local mock server). Otherwise fall
 /// back to `https://{domain}`.
 pub fn auth0_base_url(domain: &str) -> String {
-    std::env::var("TV_PROXY_AUTH0_BASE_URL")
-        .unwrap_or_else(|_| format!("https://{}", domain))
+    std::env::var("TV_PROXY_AUTH0_BASE_URL").unwrap_or_else(|_| format!("https://{}", domain))
 }
 
 /// Result of merging env vars with stored config. Fields may be `None` if
@@ -156,7 +155,12 @@ mod tests {
         // Temporarily remove env vars so stored values win.
         // We rely on the test runner not having these set; the pure path
         // checks stored fallback when env::var returns Err.
-        let stored = make_stored("store.auth0.com", "store-id", "store-secret", Some("api://v1"));
+        let stored = make_stored(
+            "store.auth0.com",
+            "store-id",
+            "store-secret",
+            Some("api://v1"),
+        );
 
         // If env vars happen to be set we can't guarantee this test, so
         // we use the helper that avoids env entirely.
@@ -170,7 +174,12 @@ mod tests {
 
     #[test]
     fn merge_config_env_takes_precedence() {
-        let stored = make_stored("store.auth0.com", "store-id", "store-secret", Some("api://v1"));
+        let stored = make_stored(
+            "store.auth0.com",
+            "store-id",
+            "store-secret",
+            Some("api://v1"),
+        );
         let result = merge_config_pure(
             Some("env.auth0.com"),
             Some("env-id"),
@@ -312,8 +321,13 @@ mod tests {
         env_audience: Option<&str>,
         stored: Option<&StoredConfig>,
     ) -> Result<Auth0Config> {
-        let result =
-            merge_config_pure(env_domain, env_client_id, env_client_secret, env_audience, stored);
+        let result = merge_config_pure(
+            env_domain,
+            env_client_id,
+            env_client_secret,
+            env_audience,
+            stored,
+        );
         if !result.missing.is_empty() {
             bail!(
                 "Not configured. Run `tv-proxy login` first, or set {} environment variable{}.",

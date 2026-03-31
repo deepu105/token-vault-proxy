@@ -29,8 +29,7 @@ impl CredentialStore {
     /// - `"keyring"` (default) — uses the OS keychain via [`KeyringBackend`].
     /// - `"file"` — uses a JSON file via [`FileBackend`].
     pub fn from_env() -> Result<Self> {
-        let storage =
-            std::env::var("TV_PROXY_STORAGE").unwrap_or_else(|_| "keyring".to_string());
+        let storage = std::env::var("TV_PROXY_STORAGE").unwrap_or_else(|_| "keyring".to_string());
         debug!(storage = %storage, "selecting credential backend");
         match storage.as_str() {
             "file" => Ok(Self::with_backend(Box::new(FileBackend::new()))),
@@ -56,11 +55,7 @@ impl CredentialStore {
         self.backend.save_auth0_tokens(tokens)
     }
 
-    pub fn save_connection_token(
-        &self,
-        connection: &str,
-        token: &ConnectionToken,
-    ) -> Result<()> {
+    pub fn save_connection_token(&self, connection: &str, token: &ConnectionToken) -> Result<()> {
         self.backend.save_connection_token(connection, token)
     }
 
@@ -76,11 +71,7 @@ impl CredentialStore {
         self.backend.get_service_settings(service)
     }
 
-    pub fn save_service_settings(
-        &self,
-        service: &str,
-        settings: &ServiceSettings,
-    ) -> Result<()> {
+    pub fn save_service_settings(&self, service: &str, settings: &ServiceSettings) -> Result<()> {
         self.backend.save_service_settings(service, settings)
     }
 
@@ -129,7 +120,10 @@ impl CredentialStore {
         };
 
         if self.is_expired(entry.expires_at) {
-            debug!(connection, "connection token expired or within buffer window");
+            debug!(
+                connection,
+                "connection token expired or within buffer window"
+            );
             return Ok(None);
         }
 
@@ -147,10 +141,7 @@ impl CredentialStore {
     }
 
     /// Get raw connection entry regardless of expiry (for scope checking, etc.).
-    pub fn get_connection_entry(
-        &self,
-        connection: &str,
-    ) -> Result<Option<ConnectionToken>> {
+    pub fn get_connection_entry(&self, connection: &str) -> Result<Option<ConnectionToken>> {
         self.backend.get_connection_token(connection)
     }
 
@@ -251,10 +242,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let store = make_store(&dir);
 
-        assert!(store
-            .get_connection_token("gmail", &[])
-            .unwrap()
-            .is_none());
+        assert!(store.get_connection_token("gmail", &[]).unwrap().is_none());
     }
 
     #[test]
@@ -303,11 +291,7 @@ mod tests {
         let token = ConnectionToken {
             access_token: "conn_full".to_string(),
             expires_at: now_ms() + 10 * 60 * 1000,
-            scopes: vec![
-                "read".to_string(),
-                "write".to_string(),
-                "admin".to_string(),
-            ],
+            scopes: vec!["read".to_string(), "write".to_string(), "admin".to_string()],
         };
         store.save_connection_token("github", &token).unwrap();
 
@@ -356,7 +340,10 @@ mod tests {
 
         // Original token should still be in cache (not invalidated)
         let raw = store.get_connection_entry("gmail").unwrap();
-        assert!(raw.is_some(), "cache entry must not be invalidated on scope mismatch");
+        assert!(
+            raw.is_some(),
+            "cache entry must not be invalidated on scope mismatch"
+        );
         assert_eq!(raw.unwrap().access_token, "conn_keep");
     }
 
@@ -431,7 +418,9 @@ mod tests {
             expires_at: now_ms() + 60 * 60 * 1000,
             scopes: vec!["https://www.googleapis.com/auth/gmail.modify".to_string()],
         };
-        store.save_connection_token("google-oauth2", &token).unwrap();
+        store
+            .save_connection_token("google-oauth2", &token)
+            .unwrap();
 
         let result = store.get_connection_token("google-oauth2", &[]).unwrap();
         assert_eq!(result, Some("gmail-token-abc".to_string()));
@@ -457,7 +446,9 @@ mod tests {
             expires_at: now_ms() + 60 * 60 * 1000,
             scopes: vec![],
         };
-        store.save_connection_token("google-oauth2", &token1).unwrap();
+        store
+            .save_connection_token("google-oauth2", &token1)
+            .unwrap();
         store.save_connection_token("slack", &token2).unwrap();
 
         let mut connections = store.list_connections().unwrap();
@@ -475,10 +466,15 @@ mod tests {
             expires_at: now_ms() + 60 * 60 * 1000,
             scopes: vec![],
         };
-        store.save_connection_token("google-oauth2", &token).unwrap();
+        store
+            .save_connection_token("google-oauth2", &token)
+            .unwrap();
 
         store.remove_connection("google-oauth2").unwrap();
-        assert!(store.get_connection_token("google-oauth2", &[]).unwrap().is_none());
+        assert!(store
+            .get_connection_token("google-oauth2", &[])
+            .unwrap()
+            .is_none());
         assert!(store.list_connections().unwrap().is_empty());
     }
 
@@ -514,7 +510,10 @@ mod tests {
         store.clear().unwrap();
 
         assert!(store.get_auth0_token().unwrap().is_none());
-        assert!(store.get_connection_token("google-oauth2", &[]).unwrap().is_none());
+        assert!(store
+            .get_connection_token("google-oauth2", &[])
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -642,11 +641,16 @@ mod tests {
             expires_at: now_ms() + 60 * 60 * 1000,
             scopes: vec![],
         };
-        store1.save_connection_token("google-oauth2", &conn).unwrap();
+        store1
+            .save_connection_token("google-oauth2", &conn)
+            .unwrap();
 
         // Read with a new store pointing at the same directory
         let store2 = make_store(&dir);
-        assert_eq!(store2.get_auth0_token().unwrap(), Some("at-persist".to_string()));
+        assert_eq!(
+            store2.get_auth0_token().unwrap(),
+            Some("at-persist".to_string())
+        );
         assert_eq!(
             store2.get_connection_token("google-oauth2", &[]).unwrap(),
             Some("ct-persist".to_string())
@@ -661,7 +665,10 @@ mod tests {
         let store = make_store(&dir);
 
         let settings = ServiceSettings {
-            allowed_domains: vec!["*.googleapis.com".to_string(), "api.example.com".to_string()],
+            allowed_domains: vec![
+                "*.googleapis.com".to_string(),
+                "api.example.com".to_string(),
+            ],
         };
         store.save_service_settings("gmail", &settings).unwrap();
 

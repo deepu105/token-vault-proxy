@@ -33,18 +33,12 @@ pub async fn run(json_mode: bool) -> Result<()> {
 
     eprintln!("{}", "Auth0 Token Vault Proxy — Setup Wizard\n".bold());
 
-    let domain = prompt(
-        "Auth0 domain",
-        existing.as_ref().map(|c| c.domain.as_str()),
-    )?;
+    let domain = prompt("Auth0 domain", existing.as_ref().map(|c| c.domain.as_str()))?;
     if domain.is_empty() {
         anyhow::bail!("Auth0 domain is required.");
     }
 
-    let client_id = prompt(
-        "Client ID",
-        existing.as_ref().map(|c| c.client_id.as_str()),
-    )?;
+    let client_id = prompt("Client ID", existing.as_ref().map(|c| c.client_id.as_str()))?;
     if client_id.is_empty() {
         anyhow::bail!("Client ID is required.");
     }
@@ -88,7 +82,10 @@ pub async fn run(json_mode: bool) -> Result<()> {
             "domain": domain,
             "clientId": client_id,
         }),
-        &format!("{} Configuration saved! Run `tv-proxy login` to authenticate.", "✓".green()),
+        &format!(
+            "{} Configuration saved! Run `tv-proxy login` to authenticate.",
+            "✓".green()
+        ),
         json_mode,
     );
 

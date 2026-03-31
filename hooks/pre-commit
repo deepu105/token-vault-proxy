@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Pre-commit hook: run rustfmt and clippy on staged Rust files.
+# Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+set -e
+
+# Only run if there are staged .rs files
+STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM -- '*.rs')
+if [ -z "$STAGED_RS" ]; then
+    exit 0
+fi
+
+echo "Running rustfmt..."
+cargo fmt
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "rustfmt check failed. Run 'cargo fmt' to fix formatting."
+    exit 1
+fi
+
+echo "Running clippy..."
+cargo clippy --all-targets --all-features -- -D warnings
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "clippy found warnings. Fix them before committing."
+    exit 1
+fi
+
+echo "Pre-commit checks passed."

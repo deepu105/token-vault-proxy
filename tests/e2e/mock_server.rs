@@ -133,8 +133,16 @@ impl MockAuth0Server {
             .and(path("/me/v1/connected-accounts/connect"))
             .respond_with(move |req: &Request| {
                 let body: serde_json::Value = serde_json::from_slice(&req.body).unwrap_or_default();
-                let redirect_uri = body.get("redirect_uri").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let state = body.get("state").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let redirect_uri = body
+                    .get("redirect_uri")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let state = body
+                    .get("state")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
 
                 // Write connect callback details to state file for fake browser to read
                 let connect_state = serde_json::json!({
@@ -142,7 +150,10 @@ impl MockAuth0Server {
                     "state": state,
                 });
                 let connect_state_file = sd.join("e2e-connect-state.json");
-                let _ = std::fs::write(&connect_state_file, serde_json::to_string(&connect_state).unwrap());
+                let _ = std::fs::write(
+                    &connect_state_file,
+                    serde_json::to_string(&connect_state).unwrap(),
+                );
 
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({
                     "auth_session": "mock-auth-session-123",
@@ -160,9 +171,9 @@ impl MockAuth0Server {
             .and(path("/me/v1/connected-accounts/complete"))
             .respond_with(move |_req: &Request| {
                 let mut accounts = load_accounts(&sd);
-                let existing = accounts.iter().any(|a| {
-                    a.get("connection").and_then(|v| v.as_str()) == Some("google-oauth2")
-                });
+                let existing = accounts
+                    .iter()
+                    .any(|a| a.get("connection").and_then(|v| v.as_str()) == Some("google-oauth2"));
                 if !existing {
                     accounts.push(serde_json::json!({
                         "id": "ca_abc123",
@@ -212,9 +223,7 @@ impl MockAuth0Server {
                 let account_id = req.url.path().rsplit('/').next().unwrap_or("");
                 let mut accounts = load_accounts(&sd);
                 let original_len = accounts.len();
-                accounts.retain(|a| {
-                    a.get("id").and_then(|v| v.as_str()) != Some(account_id)
-                });
+                accounts.retain(|a| a.get("id").and_then(|v| v.as_str()) != Some(account_id));
                 if accounts.len() == original_len {
                     return ResponseTemplate::new(404).set_body_json(serde_json::json!({
                         "error": "not_found",
@@ -271,8 +280,7 @@ impl MockAuth0Server {
                     let n = name.as_str().to_lowercase();
                     if n.starts_with("x-") {
                         if let Ok(v) = value.to_str() {
-                            custom_headers
-                                .insert(n, serde_json::Value::String(v.to_string()));
+                            custom_headers.insert(n, serde_json::Value::String(v.to_string()));
                         }
                     }
                 }
@@ -303,10 +311,7 @@ impl MockAuth0Server {
             .mount(&server)
             .await;
 
-        Self {
-            server,
-            state_dir,
-        }
+        Self { server, state_dir }
     }
 
     pub fn uri(&self) -> String {

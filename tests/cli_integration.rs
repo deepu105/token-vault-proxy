@@ -36,10 +36,7 @@ fn version_flag_prints_version() {
 
 #[test]
 fn unknown_command_fails() {
-    tv_proxy()
-        .arg("nonexistent")
-        .assert()
-        .failure();
+    tv_proxy().arg("nonexistent").assert().failure();
 }
 
 // ---------------------------------------------------------------------------
@@ -51,7 +48,10 @@ fn status_without_config_shows_not_logged_in() {
     tv_proxy()
         .arg("status")
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .env_remove("AUTH0_DOMAIN")
         .env_remove("AUTH0_CLIENT_ID")
         .env_remove("AUTH0_CLIENT_SECRET")
@@ -65,7 +65,10 @@ fn status_json_without_config() {
     tv_proxy()
         .args(["status", "--json"])
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .env_remove("AUTH0_DOMAIN")
         .env_remove("AUTH0_CLIENT_ID")
         .env_remove("AUTH0_CLIENT_SECRET")
@@ -83,7 +86,10 @@ fn login_without_config_errors() {
     tv_proxy()
         .arg("login")
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .env_remove("AUTH0_DOMAIN")
         .env_remove("AUTH0_CLIENT_ID")
         .env_remove("AUTH0_CLIENT_SECRET")
@@ -97,7 +103,10 @@ fn login_without_config_json_errors() {
     tv_proxy()
         .args(["login", "--json"])
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .env_remove("AUTH0_DOMAIN")
         .env_remove("AUTH0_CLIENT_ID")
         .env_remove("AUTH0_CLIENT_SECRET")
@@ -116,7 +125,10 @@ fn connections_empty_shows_no_services() {
     tv_proxy()
         .arg("connections")
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .env_remove("AUTH0_DOMAIN")
         .env_remove("AUTH0_CLIENT_ID")
         .env_remove("AUTH0_CLIENT_SECRET")
@@ -130,7 +142,10 @@ fn connections_json_returns_empty_array() {
     tv_proxy()
         .args(["connections", "--json"])
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .env_remove("AUTH0_DOMAIN")
         .env_remove("AUTH0_CLIENT_ID")
         .env_remove("AUTH0_CLIENT_SECRET")
@@ -148,7 +163,10 @@ fn connect_without_login_errors() {
     tv_proxy()
         .args(["connect", "gmail"])
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .env("AUTH0_DOMAIN", "test.auth0.com")
         .env("AUTH0_CLIENT_ID", "test-id")
         .env("AUTH0_CLIENT_SECRET", "test-secret")
@@ -165,7 +183,10 @@ fn fetch_unknown_service_errors() {
     tv_proxy()
         .args(["fetch", "nonexistent", "https://example.com"])
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .assert()
         .failure()
         .stderr(predicate::str::contains("Unknown service"));
@@ -176,7 +197,10 @@ fn fetch_http_url_rejected() {
     tv_proxy()
         .args(["fetch", "gmail", "http://insecure.example.com"])
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .assert()
         .failure()
         .stderr(predicate::str::contains("HTTPS"));
@@ -187,7 +211,10 @@ fn fetch_disallowed_domain_rejected() {
     tv_proxy()
         .args(["fetch", "gmail", "https://evil.example.com/data"])
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .assert()
         .failure()
         .stderr(predicate::str::contains("not in the allowed list"));
@@ -198,7 +225,10 @@ fn fetch_json_unknown_service() {
     tv_proxy()
         .args(["fetch", "--json", "nonexistent", "https://example.com"])
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .assert()
         .failure()
         .stdout(predicate::str::contains("Unknown service"));
@@ -213,7 +243,10 @@ fn disconnect_unknown_service_errors() {
     tv_proxy()
         .args(["disconnect", "nonexistent"])
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .assert()
         .failure()
         .stderr(predicate::str::contains("Unknown provider"));
@@ -228,7 +261,10 @@ fn logout_when_not_logged_in() {
     tv_proxy()
         .arg("logout")
         .env("TV_PROXY_STORAGE", "file")
-        .env("TV_PROXY_CONFIG_DIR", tempfile::TempDir::new().unwrap().path().as_os_str())
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
         .env_remove("AUTH0_DOMAIN")
         .env_remove("AUTH0_CLIENT_ID")
         .env_remove("AUTH0_CLIENT_SECRET")

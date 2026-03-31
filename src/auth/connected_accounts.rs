@@ -3,11 +3,12 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
+use super::callback_server::CallbackServer;
 use crate::utils::config::Auth0Config;
 use crate::utils::http::{check_response, http_client};
-use super::callback_server::CallbackServer;
 
-const MY_ACCOUNT_SCOPES: &str = "create:me:connected_accounts read:me:connected_accounts delete:me:connected_accounts";
+const MY_ACCOUNT_SCOPES: &str =
+    "create:me:connected_accounts read:me:connected_accounts delete:me:connected_accounts";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectedAccount {
@@ -59,7 +60,9 @@ async fn get_my_account_token(config: &Auth0Config, refresh_token: &str) -> Resu
     let response = check_response(response, "My Account token exchange failed").await?;
 
     #[derive(Deserialize)]
-    struct Resp { access_token: String }
+    struct Resp {
+        access_token: String,
+    }
     let data: Resp = response.json().await?;
     Ok(data.access_token)
 }
@@ -97,7 +100,10 @@ async fn initiate_connect(
 
     let response = check_response(response, "Initiate connect failed").await?;
 
-    response.json().await.context("Failed to parse initiate response")
+    response
+        .json()
+        .await
+        .context("Failed to parse initiate response")
 }
 
 async fn complete_connect(
@@ -128,7 +134,10 @@ async fn complete_connect(
 
     let response = check_response(response, "Complete connect failed").await?;
 
-    response.json().await.context("Failed to parse complete response")
+    response
+        .json()
+        .await
+        .context("Failed to parse complete response")
 }
 
 pub struct ConnectFlowOptions {
@@ -154,10 +163,17 @@ pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<C
     let server = CallbackServer::bind(options.port).await?;
     let redirect_uri = format!("http://127.0.0.1:{}/callback", server.port);
     debug!("callback server listening on port {}", server.port);
-    eprintln!("{}", format!("Redirect server listening on http://127.0.0.1:{}", server.port).dimmed());
+    eprintln!(
+        "{}",
+        format!(
+            "Redirect server listening on http://127.0.0.1:{}",
+            server.port
+        )
+        .dimmed()
+    );
 
     // Generate state
-    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use rand::RngExt;
     let state_bytes: Vec<u8> = (0..16).map(|_| rand::rng().random::<u8>()).collect();
     let state = URL_SAFE_NO_PAD.encode(&state_bytes);
@@ -174,8 +190,8 @@ pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<C
     )
     .await?;
 
-    let mut connect_url = url::Url::parse(&init.connect_uri)
-        .context("Invalid connect_uri from server")?;
+    let mut connect_url =
+        url::Url::parse(&init.connect_uri).context("Invalid connect_uri from server")?;
     connect_url
         .query_pairs_mut()
         .append_pair("ticket", &init.connect_params.ticket);
@@ -205,7 +221,10 @@ pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<C
 }
 
 /// List connected accounts.
-pub async fn list_connected_accounts(config: &Auth0Config, refresh_token: &str) -> Result<Vec<ConnectedAccount>> {
+pub async fn list_connected_accounts(
+    config: &Auth0Config,
+    refresh_token: &str,
+) -> Result<Vec<ConnectedAccount>> {
     let token = get_my_account_token(config, refresh_token).await?;
     let http = http_client()?;
     let base = crate::utils::config::auth0_base_url(&config.domain);
@@ -225,7 +244,11 @@ pub async fn list_connected_accounts(config: &Auth0Config, refresh_token: &str) 
 }
 
 /// Delete a connected account by ID.
-pub async fn delete_connected_account(config: &Auth0Config, refresh_token: &str, account_id: &str) -> Result<()> {
+pub async fn delete_connected_account(
+    config: &Auth0Config,
+    refresh_token: &str,
+    account_id: &str,
+) -> Result<()> {
     let token = get_my_account_token(config, refresh_token).await?;
     let http = http_client()?;
     let base = crate::utils::config::auth0_base_url(&config.domain);

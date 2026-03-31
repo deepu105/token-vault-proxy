@@ -1,4 +1,4 @@
-/// Exit code constants matching auth0-tv conventions.
+// Exit code constants matching auth0-tv conventions.
 
 /// General / unexpected error
 pub const EXIT_GENERAL: i32 = 1;

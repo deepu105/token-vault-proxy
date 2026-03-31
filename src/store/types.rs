@@ -19,7 +19,10 @@ impl fmt::Debug for Auth0Tokens {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Auth0Tokens")
             .field("access_token", &"[REDACTED]")
-            .field("refresh_token", &self.refresh_token.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("id_token", &self.id_token.as_ref().map(|_| "[REDACTED]"))
             .field("expires_at", &self.expires_at)
             .finish()
@@ -76,7 +79,7 @@ pub struct ServiceSettings {
 }
 
 /// Top-level credential data stored in the JSON file.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialData {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -87,17 +90,6 @@ pub struct CredentialData {
     pub connections: HashMap<String, ConnectionToken>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_settings: Option<HashMap<String, ServiceSettings>>,
-}
-
-impl Default for CredentialData {
-    fn default() -> Self {
-        Self {
-            config: None,
-            auth0: None,
-            connections: HashMap::new(),
-            service_settings: None,
-        }
-    }
 }
 
 #[cfg(test)]

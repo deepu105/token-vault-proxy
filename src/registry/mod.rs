@@ -1,11 +1,11 @@
-/// Provider registry: aliases, connections, default scopes, allowed domains.
-///
-/// Two-level hierarchy: providers contain services. Each provider has a canonical
-/// connection name (e.g. `google-oauth2`), friendly aliases (e.g. `google`), and
-/// one or more services (e.g. `gmail`, `calendar`) with per-service scopes and
-/// allowed domains.
-///
-/// All lookups are case-insensitive.
+// Provider registry: aliases, connections, default scopes, allowed domains.
+//
+// Two-level hierarchy: providers contain services. Each provider has a canonical
+// connection name (e.g. `google-oauth2`), friendly aliases (e.g. `google`), and
+// one or more services (e.g. `gmail`, `calendar`) with per-service scopes and
+// allowed domains.
+//
+// All lookups are case-insensitive.
 
 /// A service within a provider (e.g. "gmail" under "google-oauth2").
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,9 +119,9 @@ static PROVIDERS: &[ProviderEntry] = &[
 /// Service names like "gmail" do **not** match here.
 pub fn resolve_provider(input: &str) -> Option<&'static ProviderEntry> {
     let lower = input.to_lowercase();
-    PROVIDERS.iter().find(|p| {
-        p.connection == lower || p.aliases.iter().any(|a| a.to_lowercase() == lower)
-    })
+    PROVIDERS
+        .iter()
+        .find(|p| p.connection == lower || p.aliases.iter().any(|a| a.to_lowercase() == lower))
 }
 
 /// Resolve an input string to a service by service name (case-insensitive).
@@ -380,7 +380,10 @@ mod tests {
     #[test]
     fn get_all_provider_scopes_github_empty() {
         let scopes = get_all_provider_scopes("github");
-        assert!(scopes.is_empty(), "github uses fine-grained auth, no default scopes");
+        assert!(
+            scopes.is_empty(),
+            "github uses fine-grained auth, no default scopes"
+        );
     }
 
     #[test]

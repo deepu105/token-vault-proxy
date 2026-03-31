@@ -58,25 +58,87 @@ mod tests {
 
     #[test]
     fn app_error_exit_code_mapping() {
-        assert_eq!(AppError::InvalidInput { message: "x".into() }.exit_code(), 2);
-        assert_eq!(AppError::AuthRequired { message: "x".into() }.exit_code(), 3);
-        assert_eq!(AppError::AuthzRequired { message: "x".into() }.exit_code(), 4);
-        assert_eq!(AppError::ServiceError { message: "x".into() }.exit_code(), 5);
-        assert_eq!(AppError::NetworkError { message: "x".into() }.exit_code(), 6);
+        assert_eq!(
+            AppError::InvalidInput {
+                message: "x".into()
+            }
+            .exit_code(),
+            2
+        );
+        assert_eq!(
+            AppError::AuthRequired {
+                message: "x".into()
+            }
+            .exit_code(),
+            3
+        );
+        assert_eq!(
+            AppError::AuthzRequired {
+                message: "x".into()
+            }
+            .exit_code(),
+            4
+        );
+        assert_eq!(
+            AppError::ServiceError {
+                message: "x".into()
+            }
+            .exit_code(),
+            5
+        );
+        assert_eq!(
+            AppError::NetworkError {
+                message: "x".into()
+            }
+            .exit_code(),
+            6
+        );
     }
 
     #[test]
     fn app_error_error_code_strings() {
-        assert_eq!(AppError::InvalidInput { message: "x".into() }.error_code(), "invalid_input");
-        assert_eq!(AppError::AuthRequired { message: "x".into() }.error_code(), "auth_required");
-        assert_eq!(AppError::AuthzRequired { message: "x".into() }.error_code(), "authz_required");
-        assert_eq!(AppError::ServiceError { message: "x".into() }.error_code(), "service_error");
-        assert_eq!(AppError::NetworkError { message: "x".into() }.error_code(), "network_error");
+        assert_eq!(
+            AppError::InvalidInput {
+                message: "x".into()
+            }
+            .error_code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            AppError::AuthRequired {
+                message: "x".into()
+            }
+            .error_code(),
+            "auth_required"
+        );
+        assert_eq!(
+            AppError::AuthzRequired {
+                message: "x".into()
+            }
+            .error_code(),
+            "authz_required"
+        );
+        assert_eq!(
+            AppError::ServiceError {
+                message: "x".into()
+            }
+            .error_code(),
+            "service_error"
+        );
+        assert_eq!(
+            AppError::NetworkError {
+                message: "x".into()
+            }
+            .error_code(),
+            "network_error"
+        );
     }
 
     #[test]
     fn app_error_display_message() {
-        let err = AppError::ServiceError { message: "something broke".into() };
+        let err = AppError::ServiceError {
+            message: "something broke".into(),
+        };
         assert_eq!(format!("{}", err), "something broke");
     }
 }

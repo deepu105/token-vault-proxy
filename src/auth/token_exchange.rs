@@ -73,10 +73,7 @@ pub async fn exchange_for_connection_token(
 
         let err_code = err_resp.error.as_deref().unwrap_or("unknown");
         let fallback = format!("HTTP {}", status);
-        let err_desc = err_resp
-            .error_description
-            .as_deref()
-            .unwrap_or(&fallback);
+        let err_desc = err_resp.error_description.as_deref().unwrap_or(&fallback);
 
         debug!("token exchange failed: {} - {}", err_code, err_desc);
 

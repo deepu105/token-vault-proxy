@@ -2,17 +2,24 @@ use anyhow::Result;
 use colored::Colorize;
 use tracing::debug;
 
-use crate::auth::connected_accounts::{run_connected_account_flow, list_connected_accounts, ConnectFlowOptions};
+use crate::auth::connected_accounts::{
+    list_connected_accounts, run_connected_account_flow, ConnectFlowOptions,
+};
 use crate::auth::token_exchange::exchange_for_connection_token;
 use crate::cli::ConnectArgs;
-use crate::registry::{resolve_any, Resolution, get_all_provider_scopes, get_service_scopes};
+use crate::registry::{get_all_provider_scopes, get_service_scopes, resolve_any, Resolution};
 use crate::store::credential_store::CredentialStore;
 use crate::store::types::{ConnectionToken, ServiceSettings};
 use crate::utils::config::{require_config, resolve_browser, resolve_callback_port};
 use crate::utils::error::AppError;
 use crate::utils::output::output;
 
-pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, json_mode: bool) -> Result<()> {
+pub async fn run(
+    args: ConnectArgs,
+    browser: Option<String>,
+    port: Option<u16>,
+    json_mode: bool,
+) -> Result<()> {
     // Resolve provider/service from input (validate before auth check)
     let resolution = resolve_any(&args.provider);
     let (connection, service_name, scopes) = match &resolution {
@@ -22,23 +29,44 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
                 let svc_scopes = get_service_scopes(provider.connection, svc);
                 if svc_scopes.is_empty() {
                     return Err(AppError::InvalidInput {
-                        message: format!("Unknown service '{}' under provider '{}'", svc, provider.connection),
-                    }.into());
+                        message: format!(
+                            "Unknown service '{}' under provider '{}'",
+                            svc, provider.connection
+                        ),
+                    }
+                    .into());
                 }
-                (provider.connection.to_string(), svc.clone(), svc_scopes.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+                (
+                    provider.connection.to_string(),
+                    svc.clone(),
+                    svc_scopes.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+                )
             } else {
                 let all_scopes = get_all_provider_scopes(provider.connection);
-                (provider.connection.to_string(), args.provider.to_lowercase(), all_scopes.iter().map(|s| s.to_string()).collect())
+                (
+                    provider.connection.to_string(),
+                    args.provider.to_lowercase(),
+                    all_scopes.iter().map(|s| s.to_string()).collect(),
+                )
             }
         }
         Resolution::ServiceMatch(provider, service) => {
-            let svc_scopes = service.scopes.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-            (provider.connection.to_string(), service.name.to_string(), svc_scopes)
+            let svc_scopes = service
+                .scopes
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>();
+            (
+                provider.connection.to_string(),
+                service.name.to_string(),
+                svc_scopes,
+            )
         }
         Resolution::Unknown(_) => {
             return Err(AppError::InvalidInput {
                 message: format!("Unknown provider or service: {}", args.provider),
-            }.into());
+            }
+            .into());
         }
     };
 
@@ -78,7 +106,10 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
                         scopes.push(s.clone());
                     }
                 }
-                debug!("merged existing remote scopes for {}: {:?}", connection, scopes);
+                debug!(
+                    "merged existing remote scopes for {}: {:?}",
+                    connection, scopes
+                );
             }
         }
         Err(e) => {
@@ -86,7 +117,11 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
         }
     }
 
-    eprintln!("{} {}... Opening browser for authorization.", "Connecting".cyan(), service_name);
+    eprintln!(
+        "{} {}... Opening browser for authorization.",
+        "Connecting".cyan(),
+        service_name
+    );
 
     let browser = resolve_browser(browser.as_deref());
     let port = resolve_callback_port(port);
@@ -98,7 +133,8 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
         scopes: scopes.clone(),
         browser,
         port,
-    }).await?;
+    })
+    .await?;
 
     // Validate with a token exchange
     let mut warning: Option<String> = None;
@@ -106,11 +142,14 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
         Ok(exchange_result) => {
             // Cache the token
             let now_ms = crate::utils::time::now_ms();
-            let _ = store.save_connection_token(&connection, &ConnectionToken {
-                access_token: exchange_result.access_token,
-                expires_at: now_ms + exchange_result.expires_in * 1000,
-                scopes: exchange_result.scopes,
-            });
+            let _ = store.save_connection_token(
+                &connection,
+                &ConnectionToken {
+                    access_token: exchange_result.access_token,
+                    expires_at: now_ms + exchange_result.expires_in * 1000,
+                    scopes: exchange_result.scopes,
+                },
+            );
         }
         Err(e) => {
             let msg = e.to_string();
@@ -127,9 +166,12 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
             .filter(|d| !d.is_empty())
             .collect();
         if !domains.is_empty() {
-            store.save_service_settings(&service_name, &ServiceSettings {
-                allowed_domains: domains,
-            })?;
+            store.save_service_settings(
+                &service_name,
+                &ServiceSettings {
+                    allowed_domains: domains,
+                },
+            )?;
         }
     }
 
@@ -152,7 +194,12 @@ pub async fn run(args: ConnectArgs, browser: Option<String>, port: Option<u16>, 
     }
 
     let human = if let Some(ref w) = warning {
-        format!("{} Connected {} with warning: {}", "⚠".yellow(), service_name, w)
+        format!(
+            "{} Connected {} with warning: {}",
+            "⚠".yellow(),
+            service_name,
+            w
+        )
     } else {
         format!("{} Successfully connected {}!", "✓".green(), service_name)
     };

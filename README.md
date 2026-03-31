@@ -327,3 +327,9 @@ The release workflow will:
 ## License
 
 MIT
+
+
+## TODO
+
+- [ ] Test all commands for edge case
+- [ ] Rewrite the init command

@@ -11,7 +11,7 @@ compatibility: Requires tv-proxy binary installed (cargo install or download fro
 license: MIT
 allowed-tools: Bash(tv-proxy *)
 metadata:
-  author: auth0
+  author: deepu105
   version: '0.1'
   openclaw:
     emoji: "\U0001F510"

@@ -1,0 +1,289 @@
+use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
+use tracing::debug;
+
+use crate::utils::config::Auth0Config;
+use super::callback_server::CallbackServer;
+
+const MY_ACCOUNT_SCOPES: &str = "create:me:connected_accounts read:me:connected_accounts delete:me:connected_accounts";
+
+fn http_client() -> Result<reqwest::Client> {
+    Ok(reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectedAccount {
+    pub id: String,
+    pub connection: String,
+    pub scopes: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct ConnectInitResponse {
+    auth_session: String,
+    connect_uri: String,
+    connect_params: ConnectParams,
+}
+
+#[derive(Deserialize)]
+struct ConnectParams {
+    ticket: String,
+}
+
+#[derive(Deserialize)]
+struct ConnectCompleteResponse {
+    id: String,
+    connection: String,
+    scopes: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct AccountsListResponse {
+    accounts: Option<Vec<ConnectedAccount>>,
+}
+
+/// Get a My Account API token by exchanging refresh token with MRRT audience.
+async fn get_my_account_token(config: &Auth0Config, refresh_token: &str) -> Result<String> {
+    let base = crate::utils::config::auth0_base_url(&config.domain);
+    let audience = format!("{}/me/", base);
+    debug!("requesting my account token with audience {}", audience);
+
+    let endpoints = super::oidc_config::discover(&config.domain).await?;
+    let http = http_client()?;
+
+    let response = http
+        .post(&endpoints.token_endpoint)
+        .form(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", config.client_id.as_str()),
+            ("client_secret", config.client_secret.as_str()),
+            ("refresh_token", refresh_token),
+            ("audience", audience.as_str()),
+            ("scope", MY_ACCOUNT_SCOPES),
+        ])
+        .send()
+        .await
+        .context("My Account token request failed")?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        bail!("My Account token exchange failed (HTTP {}): {}", status, body);
+    }
+
+    #[derive(Deserialize)]
+    struct Resp { access_token: String }
+    let data: Resp = response.json().await?;
+    Ok(data.access_token)
+}
+
+async fn initiate_connect(
+    config: &Auth0Config,
+    my_account_token: &str,
+    connection: &str,
+    scopes: &[String],
+    redirect_uri: &str,
+    state: &str,
+) -> Result<ConnectInitResponse> {
+    debug!("initiating connected account for {}", connection);
+    let http = http_client()?;
+    let base = crate::utils::config::auth0_base_url(&config.domain);
+    let url = format!("{}/me/v1/connected-accounts/connect", base);
+
+    let body = serde_json::json!({
+        "connection": connection,
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "scopes": scopes,
+    });
+
+    let response = http
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", my_account_token))
+        .json(&body)
+        .send()
+        .await
+        .context("Initiate connect request failed")?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        bail!("Initiate connect failed (HTTP {}): {}", status, body);
+    }
+
+    response.json().await.context("Failed to parse initiate response")
+}
+
+async fn complete_connect(
+    config: &Auth0Config,
+    my_account_token: &str,
+    auth_session: &str,
+    connect_code: &str,
+    redirect_uri: &str,
+) -> Result<ConnectCompleteResponse> {
+    debug!("completing connected account link");
+    let http = http_client()?;
+    let base = crate::utils::config::auth0_base_url(&config.domain);
+    let url = format!("{}/me/v1/connected-accounts/complete", base);
+
+    let body = serde_json::json!({
+        "auth_session": auth_session,
+        "connect_code": connect_code,
+        "redirect_uri": redirect_uri,
+    });
+
+    let response = http
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", my_account_token))
+        .json(&body)
+        .send()
+        .await
+        .context("Complete connect request failed")?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        bail!("Complete connect failed (HTTP {}): {}", status, body);
+    }
+
+    response.json().await.context("Failed to parse complete response")
+}
+
+pub struct ConnectFlowOptions {
+    pub config: Auth0Config,
+    pub refresh_token: String,
+    pub connection: String,
+    pub scopes: Vec<String>,
+    pub browser: Option<String>,
+    pub port: Option<u16>,
+}
+
+/// Run the full Connected Accounts flow.
+/// Uses tokio::sync::oneshot for auth_session handoff to avoid race condition.
+pub async fn run_connected_account_flow(options: ConnectFlowOptions) -> Result<ConnectedAccount> {
+    let my_account_token = get_my_account_token(&options.config, &options.refresh_token).await?;
+    let my_account_token_for_complete = my_account_token.clone();
+
+    let server = CallbackServer::bind(options.port).await?;
+    let redirect_uri = format!("http://127.0.0.1:{}/callback", server.port);
+    debug!("callback server listening on port {}", server.port);
+    eprintln!("Redirect server listening on http://127.0.0.1:{}", server.port);
+
+    // Generate state
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use rand::Rng;
+    let state_bytes: Vec<u8> = (0..16).map(|_| rand::rng().random::<u8>()).collect();
+    let state = URL_SAFE_NO_PAD.encode(&state_bytes);
+
+    // Deferred auth_session via oneshot (race condition fix)
+    let (auth_session_tx, auth_session_rx) = tokio::sync::oneshot::channel::<Result<String>>();
+
+    let config = options.config.clone();
+    let connection = options.connection.clone();
+    let scopes = options.scopes.clone();
+    let redir = redirect_uri.clone();
+    let st = state.clone();
+    let browser = options.browser.clone();
+
+    tokio::spawn(async move {
+        let result = initiate_connect(&config, &my_account_token, &connection, &scopes, &redir, &st).await;
+        match result {
+            Ok(init) => {
+                let mut connect_url = match url::Url::parse(&init.connect_uri) {
+                    Ok(u) => u,
+                    Err(e) => {
+                        let _ = auth_session_tx.send(Err(anyhow::anyhow!("Invalid connect_uri: {}", e)));
+                        return;
+                    }
+                };
+                connect_url.query_pairs_mut().append_pair("ticket", &init.connect_params.ticket);
+
+                debug!("opening browser to {}", connect_url);
+                if let Some(ref b) = browser {
+                    let _ = open::with(connect_url.as_str(), b);
+                } else {
+                    let _ = open::that(connect_url.as_str());
+                }
+
+                let _ = auth_session_tx.send(Ok(init.auth_session));
+            }
+            Err(e) => {
+                let _ = auth_session_tx.send(Err(e));
+            }
+        }
+    });
+
+    // Wait for callback
+    let callback = server.wait().await?;
+
+    if callback.state != state {
+        bail!("State mismatch — possible CSRF attack");
+    }
+
+    let auth_session = auth_session_rx.await
+        .map_err(|_| anyhow::anyhow!("auth_session channel closed"))?
+        .context("Failed to initiate connect")?;
+
+    let result = complete_connect(
+        &options.config,
+        &my_account_token_for_complete,
+        &auth_session,
+        &callback.code,
+        &redirect_uri,
+    ).await?;
+
+    Ok(ConnectedAccount {
+        id: result.id,
+        connection: result.connection,
+        scopes: result.scopes,
+    })
+}
+
+/// List connected accounts.
+pub async fn list_connected_accounts(config: &Auth0Config, refresh_token: &str) -> Result<Vec<ConnectedAccount>> {
+    let token = get_my_account_token(config, refresh_token).await?;
+    let http = http_client()?;
+    let base = crate::utils::config::auth0_base_url(&config.domain);
+    let url = format!("{}/me/v1/connected-accounts/accounts", base);
+
+    let response = http
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .context("List connected accounts failed")?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        bail!("List connected accounts failed (HTTP {}): {}", status, body);
+    }
+
+    let data: AccountsListResponse = response.json().await?;
+    Ok(data.accounts.unwrap_or_default())
+}
+
+/// Delete a connected account by ID.
+pub async fn delete_connected_account(config: &Auth0Config, refresh_token: &str, account_id: &str) -> Result<()> {
+    let token = get_my_account_token(config, refresh_token).await?;
+    let http = http_client()?;
+    let base = crate::utils::config::auth0_base_url(&config.domain);
+    let url = format!("{}/me/v1/connected-accounts/accounts/{}", base, account_id);
+
+    let response = http
+        .delete(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .context("Delete connected account failed")?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        bail!("Delete connected account failed (HTTP {}): {}", status, body);
+    }
+
+    Ok(())
+}

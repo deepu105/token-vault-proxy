@@ -1,0 +1,27 @@
+# Rust build artifacts
+/target/
+
+# Keep Cargo.lock for CLI/binary applications
+# (do not ignore Cargo.lock)
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test/coverage artifacts
+coverage/
+*.profraw
+*.profdata

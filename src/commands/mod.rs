@@ -26,6 +26,6 @@ pub async fn dispatch(
         Commands::Disconnect(args) => disconnect::run(args, json_mode, confirmed).await,
         Commands::Connections => connections::run(json_mode).await,
         Commands::Fetch(args) => fetch::run(args, json_mode).await,
-        Commands::Init => init::run(json_mode).await,
+        Commands::Init => init::run(browser, port, json_mode).await,
     }
 }

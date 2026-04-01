@@ -74,11 +74,28 @@ pub(crate) fn merge_config_pure(
 
 /// Merge config from env vars and stored values. Env vars take precedence.
 pub fn merge_config(stored: Option<&StoredConfig>) -> MergeResult {
+    merge_config_with_flags(None, None, None, None, stored)
+}
+
+/// Merge config from explicit flag values, env vars, and stored values.
+/// Precedence: flags > env vars > stored.
+pub fn merge_config_with_flags(
+    flag_domain: Option<&str>,
+    flag_client_id: Option<&str>,
+    flag_client_secret: Option<&str>,
+    flag_audience: Option<&str>,
+    stored: Option<&StoredConfig>,
+) -> MergeResult {
+    let env_domain = std::env::var("AUTH0_DOMAIN").ok();
+    let env_client_id = std::env::var("AUTH0_CLIENT_ID").ok();
+    let env_client_secret = std::env::var("AUTH0_CLIENT_SECRET").ok();
+    let env_audience = std::env::var("AUTH0_AUDIENCE").ok();
+
     merge_config_pure(
-        std::env::var("AUTH0_DOMAIN").ok().as_deref(),
-        std::env::var("AUTH0_CLIENT_ID").ok().as_deref(),
-        std::env::var("AUTH0_CLIENT_SECRET").ok().as_deref(),
-        std::env::var("AUTH0_AUDIENCE").ok().as_deref(),
+        flag_domain.or(env_domain.as_deref()),
+        flag_client_id.or(env_client_id.as_deref()),
+        flag_client_secret.or(env_client_secret.as_deref()),
+        flag_audience.or(env_audience.as_deref()),
         stored,
     )
 }

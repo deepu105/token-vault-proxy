@@ -21,6 +21,7 @@ metadata:
     os:
       - darwin
       - linux
+      - windows
     install:
       - id: cargo
         kind: cargo
@@ -40,7 +41,17 @@ third-party services on behalf of authenticated users via Auth0 Token Vault.
 
 ## First-time setup
 
-If `tv-proxy --json status` returns a `not_configured` error, guide the user through setup:
+If `tv-proxy --json status` returns a `not_configured` error, guide the user through setup. The easiest path is:
+
+```bash
+tv-proxy init
+```
+
+This interactive wizard handles all prerequisites, Auth0 configuration, callback URLs, and login in one flow.
+
+### Manual setup
+
+Alternatively, set up each step manually:
 
 1. **Install Auth0 CLI** (if not already installed):
 
@@ -51,13 +62,12 @@ If `tv-proxy --json status` returns a `not_configured` error, guide the user thr
 2. **Run the Token Vault setup wizard** (interactive — requires human):
 
    ```bash
-   npx configure-auth0-token-vault
+   npx configure-auth0-token-vault -- --flavor=refresh_token_exchange
    ```
 
    The wizard handles Auth0 CLI login automatically. When prompted:
    - Select **Create a new application** (or use an existing one)
    - Select **Regular Web Application** for the app type
-   - Select **Refresh Token Exchange** for the Token Vault configuration
 
    Note the **Client ID** from the output.
 
@@ -78,6 +88,10 @@ If `tv-proxy --json status` returns a `not_configured` error, guide the user thr
 5. **Log in with tv-proxy:**
    ```bash
    tv-proxy login
+   ```
+   You'll be prompted for domain, client ID, and client secret. You can also pass them as flags:
+   ```bash
+   tv-proxy login --domain your-tenant.auth0.com --client-id <id> --client-secret <secret>
    ```
 
 All setup steps require human interaction. Do not attempt to run them autonomously.
@@ -119,8 +133,9 @@ Auth and connect/logout callback servers default to trying ports `18484-18489`. 
 
 ### Authentication & setup
 
-- `tv-proxy login` — authenticate via browser (human-in-the-loop)
-- `tv-proxy login --connection google-oauth2` — use a specific Auth0 connection
+- `tv-proxy login` — authenticate via browser (human-in-the-loop); prompts for config if needed
+- `tv-proxy login --reconfigure` — re-prompt for domain, client ID, and secret
+- `tv-proxy login --domain d --client-id i --client-secret s` — pass config as flags
 - `tv-proxy logout` — clear stored credentials
 - `tv-proxy logout --local` — clear only local credentials
 - `tv-proxy status` — show current user and connected providers
@@ -129,7 +144,7 @@ Auth and connect/logout callback servers default to trying ports `18484-18489`. 
 - `tv-proxy disconnect <provider>` — disconnect a provider (local token only by default)
 - `tv-proxy disconnect <provider> --remote` — disconnect and remove the server-side connection
 - `tv-proxy connections` — list connected providers
-- `tv-proxy init` — interactive guided setup wizard
+- `tv-proxy init` — interactive guided setup wizard (installs prerequisites, configures Auth0, logs in)
 
 ### API passthrough (fetch)
 

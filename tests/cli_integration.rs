@@ -95,7 +95,7 @@ fn login_without_config_errors() {
         .env_remove("AUTH0_CLIENT_SECRET")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Not configured"));
+        .stderr(predicate::str::contains("Cannot prompt for configuration"));
 }
 
 #[test]
@@ -113,7 +113,7 @@ fn login_without_config_json_errors() {
         .assert()
         .failure()
         .stdout(predicate::str::contains("\"code\""))
-        .stdout(predicate::str::contains("Not configured"));
+        .stdout(predicate::str::contains("Cannot prompt for configuration"));
 }
 
 // ---------------------------------------------------------------------------

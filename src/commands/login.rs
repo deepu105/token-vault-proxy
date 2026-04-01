@@ -4,9 +4,9 @@ use colored::Colorize;
 use crate::auth::pkce_flow::{run_pkce_flow, PkceFlowOptions};
 use crate::cli::LoginArgs;
 use crate::store::credential_store::CredentialStore;
-use crate::store::types::StoredConfig;
-use crate::utils::config::{require_config, resolve_browser, resolve_callback_port};
+use crate::utils::config::{resolve_browser, resolve_callback_port, Auth0Config};
 use crate::utils::output::output;
+use crate::utils::prompt::resolve_config_with_prompts;
 
 pub async fn run(
     args: LoginArgs,
@@ -16,17 +16,23 @@ pub async fn run(
 ) -> Result<()> {
     let store = CredentialStore::from_env()?;
 
-    // Resolve config from env + store
-    let stored = store.get_config()?;
-    let config = require_config(stored.as_ref())?;
+    // Resolve config: CLI flags > env vars > stored config > interactive prompts
+    let stored = if args.reconfigure {
+        None
+    } else {
+        store.get_config()?
+    };
 
-    // Save resolved config so future runs don't need env vars
-    store.save_config(&StoredConfig {
-        domain: config.domain.clone(),
-        client_id: config.client_id.clone(),
-        client_secret: config.client_secret.clone(),
-        audience: config.audience.clone(),
-    })?;
+    let config = resolve_config_with_prompts(
+        args.domain.as_deref(),
+        args.client_id.as_deref(),
+        args.client_secret.as_deref(),
+        args.audience.as_deref(),
+        stored.as_ref(),
+    )?;
+
+    // Persist resolved config so future runs don't need env vars or flags
+    store.save_config(&config)?;
 
     let existing = store.get_auth0_tokens()?;
     let reauthenticated = existing.is_some();
@@ -35,10 +41,15 @@ pub async fn run(
     let port = resolve_callback_port(port);
 
     let tokens = run_pkce_flow(PkceFlowOptions {
-        config,
-        connection: args.connection,
-        connection_scope: args.connection_scope,
-        scope: args.scope,
+        config: Auth0Config {
+            domain: config.domain,
+            client_id: config.client_id,
+            client_secret: config.client_secret,
+            audience: config.audience,
+        },
+        connection: None,
+        connection_scope: None,
+        scope: None,
         browser,
         port,
         extra_params: vec![],

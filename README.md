@@ -4,7 +4,65 @@ Authenticated HTTP proxy for third-party [services](https://auth0.com/ai/docs/in
 
 Unlike service-specific CLIs like [Auth0 Token Vault CLI](https://github.com/deepu105/auth0-token-vault-cli), `tv-proxy` is a generic authenticated fetch proxy: connect a provider once, then make authenticated requests to any allowed domain using that provider's token.
 
-## Auth0 Tenant Setup
+## Quick Start
+
+### Prerequisites
+
+- An [Auth0 Account](https://auth0.com/signup?onboard_app=auth_for_aa&ocid=701KZ000000cXXxYAM-aPA4z0000008OZeGAM)
+- At least one [connection](https://auth0.com/ai/docs/integrations/overview) configured (e.g. [Google](https://auth0.com/ai/docs/integrations/google))
+
+### Guided Setup
+
+Run the interactive setup wizard — it installs prerequisites, configures your Auth0 tenant, and logs you in:
+
+```bash
+tv-proxy init
+```
+
+### Manual Setup
+
+If you prefer to configure things manually:
+
+#### 1. Login
+
+```bash
+tv-proxy login
+```
+
+You'll be prompted for your Auth0 domain, client ID, and client secret (see [Auth0 Tenant Setup](#auth0-tenant-setup) below), then a browser window opens for authentication. You can also pass them as flags:
+
+```bash
+tv-proxy login --domain your-tenant.auth0.com --client-id abc123 --client-secret xyz789
+```
+
+Or set environment variables to skip the prompts entirely:
+
+```bash
+export AUTH0_DOMAIN=your-tenant.auth0.com
+export AUTH0_CLIENT_ID=abc123
+export AUTH0_CLIENT_SECRET=xyz789
+tv-proxy login
+```
+
+#### 2. Connect a provider
+
+```bash
+tv-proxy connect google
+tv-proxy connect slack
+tv-proxy connect github
+```
+
+#### 3. Make an authenticated API call
+
+```bash
+tv-proxy fetch gmail https://gmail.googleapis.com/gmail/v1/users/me/messages
+tv-proxy fetch github https://api.github.com/user
+tv-proxy fetch slack https://slack.com/api/conversations.list
+```
+
+The `Authorization: Bearer <token>` header is injected automatically.
+
+## Manual Auth0 Tenant Setup
 
 ### Prerequisites
 
@@ -88,12 +146,13 @@ VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/deepu105/token-vault
 
 Download the latest release for your platform from [GitHub Releases](https://github.com/deepu105/token-vault-proxy/releases):
 
-| Platform      | Binary                  |
-| ------------- | ----------------------- |
-| Linux x64     | `tv-proxy-linux-x64`   |
-| Linux arm64   | `tv-proxy-linux-arm64`  |
-| macOS x64     | `tv-proxy-macos-x64`   |
-| macOS arm64   | `tv-proxy-macos-arm64`  |
+| Platform      | Binary                       |
+| ------------- | ---------------------------- |
+| Linux x64     | `tv-proxy-linux-x64`        |
+| Linux arm64   | `tv-proxy-linux-arm64`       |
+| macOS x64     | `tv-proxy-macos-x64`        |
+| macOS arm64   | `tv-proxy-macos-arm64`       |
+| Windows x64   | `tv-proxy-windows-x64.exe`  |
 
 ### Build from source
 
@@ -114,41 +173,14 @@ cargo build --release
 # Binary at ./target/release/tv-proxy
 ```
 
-## Quick Start
-
-### 1. Login
-
-```bash
-tv-proxy login
-```
-
-You'll be prompted for your Auth0 domain, client ID, and client secret, then a browser window opens for authentication.
-
-### 2. Connect a provider
-
-```bash
-tv-proxy connect google
-tv-proxy connect slack
-tv-proxy connect github
-```
-
-### 3. Make an authenticated API call
-
-```bash
-tv-proxy fetch gmail https://gmail.googleapis.com/gmail/v1/users/me/messages
-tv-proxy fetch github https://api.github.com/user
-tv-proxy fetch slack https://slack.com/api/conversations.list
-```
-
-The `Authorization: Bearer <token>` header is injected automatically.
-
 ## Commands
 
 ### Authentication & Setup
 
 ```bash
-tv-proxy login                          # Authenticate via browser-based PKCE flow
-tv-proxy login --connection google-oauth2  # Use a specific Auth0 connection
+tv-proxy login                          # Authenticate (prompts for config if needed)
+tv-proxy login --reconfigure            # Re-prompt for Auth0 domain, client ID, and secret
+tv-proxy login --domain d --client-id i --client-secret s  # Pass config as flags
 tv-proxy status                         # Show current user and connected providers
 tv-proxy connect google                 # Connect Google (opens browser)
 tv-proxy connect slack                  # Connect Slack
@@ -213,7 +245,9 @@ tv-proxy connect github --allowed-domains "ghcr.io,uploads.github.com"
 
 ## Configuration
 
-Set environment variables **or** run `tv-proxy login`, which prompts for the required values and persists them in the credential store. Each field is resolved individually: environment variable takes precedence over stored value.
+Configuration is resolved per-field in this order: **CLI flags → environment variables → stored config → interactive prompts**.
+
+On first run, `tv-proxy login` prompts for the required values and persists them in the credential store. Subsequent runs use the stored values automatically. Pass `--reconfigure` to re-prompt.
 
 ### Environment Variables
 
@@ -222,6 +256,7 @@ Set environment variables **or** run `tv-proxy login`, which prompts for the req
 | `AUTH0_DOMAIN`       | Auth0 tenant domain                                      |
 | `AUTH0_CLIENT_ID`    | Auth0 application client ID                              |
 | `AUTH0_CLIENT_SECRET`| Auth0 application client secret                          |
+| `AUTH0_AUDIENCE`     | API audience (optional)                                  |
 | `TV_PROXY_STORAGE`   | Credential backend: `keyring` (default) or `file`        |
 | `TV_PROXY_CONFIG_DIR`| Override config directory (default: `~/.tv-proxy/`)      |
 | `TV_PROXY_BROWSER`   | Browser to open for auth flows (e.g. `firefox`)          |
@@ -286,6 +321,14 @@ cargo clippy                # Lint
 cargo fmt -- --check        # Check formatting
 ```
 
+### Pre-commit hooks
+
+The project includes a pre-commit hook that runs `cargo fmt --check` and `cargo clippy -D warnings` on staged `.rs` files. To enable it:
+
+```bash
+git config core.hooksPath hooks
+```
+
 ### Project Structure
 
 ```
@@ -296,7 +339,7 @@ src/
 ├── auth/                # PKCE auth flow, callback server, token exchange
 ├── store/               # Credential store (facade + file/keyring backends)
 ├── registry/            # Provider registry (google, slack, github mappings)
-└── utils/               # Output formatting, config, errors
+└── utils/               # Output formatting, config, prompts, errors
 tests/
 ├── cli_integration.rs   # CLI integration tests (assert_cmd)
 ├── e2e_flow.rs          # End-to-end tests (wiremock + real binary)
@@ -327,9 +370,3 @@ The release workflow will:
 ## License
 
 MIT
-
-
-## TODO
-
-- [ ] Test all commands for edge case
-- [ ] Rewrite the init command

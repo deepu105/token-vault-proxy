@@ -68,21 +68,25 @@ pub enum Commands {
 
 #[derive(clap::Args, Debug)]
 pub struct LoginArgs {
-    /// Auth0 connection to use for login
+    /// Auth0 domain (e.g. your-tenant.eu.auth0.com)
     #[arg(long)]
-    pub connection: Option<String>,
+    pub domain: Option<String>,
 
-    /// Connection-specific scopes
+    /// Auth0 application client ID
     #[arg(long)]
-    pub connection_scope: Option<String>,
+    pub client_id: Option<String>,
+
+    /// Auth0 application client secret
+    #[arg(long)]
+    pub client_secret: Option<String>,
 
     /// API audience
     #[arg(long)]
     pub audience: Option<String>,
 
-    /// Additional scopes
+    /// Re-prompt for Auth0 domain, client ID, and secret
     #[arg(long)]
-    pub scope: Option<String>,
+    pub reconfigure: bool,
 }
 
 #[derive(clap::Args, Debug)]

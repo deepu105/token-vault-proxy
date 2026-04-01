@@ -1,93 +1,241 @@
-use anyhow::Result;
+use std::io::IsTerminal;
+use std::process::{Command, Stdio};
+
+use anyhow::{bail, Context, Result};
 use colored::Colorize;
-use std::io::{self, BufRead, Write};
 
-use crate::store::credential_store::CredentialStore;
-use crate::store::types::StoredConfig;
-use crate::utils::output::output;
+use super::login;
+use crate::cli::LoginArgs;
+use crate::utils::prompt::{clean_domain, prompt_required};
 
-fn prompt(label: &str, default: Option<&str>) -> Result<String> {
-    let suffix = match default {
-        Some(d) => format!(" [{}]", d),
-        None => String::new(),
-    };
-    eprint!("{}{}: ", label, suffix);
-    io::stderr().flush()?;
+const CALLBACK_PORTS: std::ops::RangeInclusive<u16> = 18484..=18489;
 
-    let mut line = String::new();
-    io::stdin().lock().read_line(&mut line)?;
-    let trimmed = line.trim().to_string();
-
-    if trimmed.is_empty() {
-        if let Some(d) = default {
-            return Ok(d.to_string());
-        }
-    }
-
-    Ok(trimmed)
+fn is_command_available(cmd: &str) -> bool {
+    let check = if cfg!(windows) { "where" } else { "which" };
+    Command::new(check)
+        .arg(cmd)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
-pub async fn run(json_mode: bool) -> Result<()> {
-    let store = CredentialStore::from_env()?;
-    let existing = store.get_config()?;
+fn run_inherited(cmd: &str, args: &[&str]) -> Result<bool> {
+    let status = Command::new(cmd)
+        .args(args)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .with_context(|| format!("Failed to run: {} {}", cmd, args.join(" ")))?;
+    Ok(status.success())
+}
 
-    eprintln!("{}", "Auth0 Token Vault Proxy — Setup Wizard\n".bold());
+fn run_captured(cmd: &str, args: &[&str]) -> Result<String> {
+    let output = Command::new(cmd)
+        .args(args)
+        .output()
+        .with_context(|| format!("Failed to run: {} {}", cmd, args.join(" ")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("{} failed: {}", cmd, stderr.trim());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
 
-    let domain = prompt("Auth0 domain", existing.as_ref().map(|c| c.domain.as_str()))?;
-    if domain.is_empty() {
-        anyhow::bail!("Auth0 domain is required.");
+/// Try to auto-detect the Auth0 tenant domain from the auth0 CLI.
+fn detect_domain() -> Option<String> {
+    let output = run_captured("auth0", &["tenants", "list", "--json"]).ok()?;
+    let tenants: serde_json::Value = serde_json::from_str(&output).ok()?;
+
+    let arr = tenants.as_array()?;
+    if arr.len() == 1 {
+        return arr[0]["name"]
+            .as_str()
+            .or_else(|| arr[0]["domain"].as_str())
+            .map(|s| s.to_string());
     }
 
-    let client_id = prompt("Client ID", existing.as_ref().map(|c| c.client_id.as_str()))?;
-    if client_id.is_empty() {
-        anyhow::bail!("Client ID is required.");
-    }
-
-    let secret_default = existing.as_ref().map(|c| c.client_secret.as_str());
-    let secret_display = secret_default.map(|_| "****");
-    let client_secret_input = prompt("Client Secret", secret_display)?;
-    let client_secret = if client_secret_input.is_empty() || client_secret_input == "****" {
-        match secret_default {
-            Some(s) => s.to_string(),
-            None => anyhow::bail!("Client Secret is required."),
+    if arr.len() > 1 {
+        eprintln!("\nMultiple tenants detected:");
+        for (i, t) in arr.iter().enumerate() {
+            let name = t["name"].as_str().unwrap_or("unknown");
+            eprintln!("  {}. {}", i + 1, name);
         }
-    } else {
-        client_secret_input
-    };
-    if client_secret.is_empty() {
-        anyhow::bail!("Client Secret is required.");
+        if let Ok(choice) = prompt_required("Select tenant number: ") {
+            if let Ok(idx) = choice.parse::<usize>() {
+                if idx > 0 && idx <= arr.len() {
+                    return arr[idx - 1]["name"]
+                        .as_str()
+                        .or_else(|| arr[idx - 1]["domain"].as_str())
+                        .map(|s| s.to_string());
+                }
+            }
+        }
     }
 
-    let audience = prompt(
-        "API Audience (optional, press Enter to skip)",
-        existing.as_ref().and_then(|c| c.audience.as_deref()),
+    None
+}
+
+/// Retrieve domain and client secret from the auth0 CLI, falling back to prompts.
+fn get_app_credentials(client_id: &str) -> Result<(String, String)> {
+    // Try JSON output first
+    if let Ok(output) = run_captured(
+        "auth0",
+        &["apps", "show", client_id, "--reveal-secrets", "--json"],
+    ) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&output) {
+            let secret = json["client_secret"]
+                .as_str()
+                .or_else(|| json["clientSecret"].as_str());
+
+            let domain = detect_domain();
+
+            if let (Some(domain), Some(secret)) = (domain, secret) {
+                return Ok((clean_domain(&domain), secret.to_string()));
+            }
+        }
+    }
+
+    // Fall back: show the app details and prompt
+    eprintln!(
+        "{} Could not auto-detect credentials. Retrieving app details...\n",
+        "!".yellow()
+    );
+    let _ = run_inherited("auth0", &["apps", "show", client_id, "--reveal-secrets"]);
+
+    eprintln!();
+    let domain = prompt_required("Auth0 domain (e.g. your-tenant.eu.auth0.com): ")?;
+    let secret = prompt_required("Client secret from above: ")?;
+    Ok((clean_domain(&domain), secret))
+}
+
+pub async fn run(browser: Option<String>, port: Option<u16>, json_mode: bool) -> Result<()> {
+    eprintln!("{}\n", "Auth0 Token Vault Proxy — Setup Wizard".bold());
+
+    if !std::io::stdin().is_terminal() {
+        bail!("The init command requires an interactive terminal.");
+    }
+
+    // Check prerequisites
+    if !is_command_available("auth0") {
+        eprintln!(
+            "{} The Auth0 CLI is required but not installed.\n",
+            "!".yellow()
+        );
+        if cfg!(target_os = "macos") {
+            eprintln!("  Install via Homebrew:");
+            eprintln!("    brew tap auth0/auth0-cli && brew install auth0");
+        } else if cfg!(windows) {
+            eprintln!("  Install via Scoop:");
+            eprintln!("    scoop bucket add auth0 https://github.com/auth0/scoop-auth0-cli");
+            eprintln!("    scoop install auth0-cli");
+        } else {
+            eprintln!("  Install via curl:");
+            eprintln!("    curl -sSfL https://raw.githubusercontent.com/auth0/auth0-cli/main/install.sh | sh");
+        }
+        eprintln!();
+        bail!("auth0 CLI not found. Install it and run `tv-proxy init` again.");
+    }
+
+    if !is_command_available("npx") {
+        eprintln!("{} npx is required but not installed.\n", "!".yellow());
+        eprintln!("  Install Node.js: https://nodejs.org/");
+        bail!("npx not found. Install Node.js and run `tv-proxy init` again.");
+    }
+
+    // Step 1: Configure Token Vault
+    eprintln!("{}", "Step 1: Configure Auth0 Token Vault".bold());
+    eprintln!("The configuration wizard will guide you through setting up Auth0");
+    eprintln!("Token Vault for your tenant.\n");
+
+    let ok = run_inherited(
+        "npx",
+        &[
+            "configure-auth0-token-vault",
+            "--",
+            "--flavor=refresh_token_exchange",
+        ],
     )?;
 
-    let config = StoredConfig {
-        domain: domain.clone(),
-        client_id: client_id.clone(),
-        client_secret,
-        audience: if audience.is_empty() {
-            None
-        } else {
-            Some(audience)
-        },
+    if !ok {
+        bail!("Token Vault configuration failed. Fix the issue and run `tv-proxy init` again.");
+    }
+
+    // Step 2: Get Client ID
+    eprintln!();
+    let client_id = prompt_required("Enter the Client ID from the output above: ")?;
+
+    // Step 3: Update callback URLs
+    eprintln!("\n{}", "Step 2: Configure callback URLs".bold());
+
+    let callbacks = CALLBACK_PORTS
+        .map(|p| format!("http://127.0.0.1:{p}/callback"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let logout_urls = CALLBACK_PORTS
+        .map(|p| format!("http://127.0.0.1:{p}"))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let ok = run_inherited(
+        "auth0",
+        &[
+            "apps",
+            "update",
+            &client_id,
+            "--callbacks",
+            &callbacks,
+            "--logout-urls",
+            &logout_urls,
+        ],
+    )?;
+
+    if !ok {
+        bail!(
+            "Failed to update callback URLs. Run manually:\n  \
+             auth0 apps update {} --callbacks \"{}\" --logout-urls \"{}\"",
+            client_id,
+            callbacks,
+            logout_urls
+        );
+    }
+    eprintln!("{} Callback URLs configured.\n", "✓".green());
+
+    // Step 4: Retrieve client secret and domain
+    eprintln!("{}", "Step 3: Retrieve credentials".bold());
+
+    let (domain, client_secret) = get_app_credentials(&client_id)?;
+
+    eprintln!("{} Credentials retrieved.", "✓".green());
+    eprintln!("  Domain:    {}", domain);
+    eprintln!("  Client ID: {}\n", client_id);
+
+    // Step 5: Login
+    eprintln!("{}", "Step 4: Authenticate".bold());
+
+    let login_args = LoginArgs {
+        domain: Some(domain),
+        client_id: Some(client_id),
+        client_secret: Some(client_secret),
+        audience: None,
+        reconfigure: false,
     };
 
-    store.save_config(&config)?;
+    login::run(login_args, browser, port, json_mode).await?;
 
-    output(
-        serde_json::json!({
-            "status": "configured",
-            "domain": domain,
-            "clientId": client_id,
-        }),
-        &format!(
-            "{} Configuration saved! Run `tv-proxy login` to authenticate.",
-            "✓".green()
-        ),
-        json_mode,
-    );
+    // Step 6: Next steps
+    eprintln!("\n{}\n", "🎉 Setup complete!".bold());
+    eprintln!("{}", "Next steps:".bold());
+    eprintln!("  {} Connect a provider:", "1.".dimmed());
+    eprintln!("     tv-proxy connect gmail");
+    eprintln!("     tv-proxy connect github");
+    eprintln!("     tv-proxy connect slack");
+    eprintln!("  {} Make authenticated API calls:", "2.".dimmed());
+    eprintln!("     tv-proxy fetch gmail https://gmail.googleapis.com/gmail/v1/users/me/messages");
+    eprintln!("  {} Check status:", "3.".dimmed());
+    eprintln!("     tv-proxy status");
 
     Ok(())
 }

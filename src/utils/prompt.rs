@@ -6,6 +6,13 @@ use colored::Colorize;
 use super::config::merge_config_with_flags;
 use crate::store::types::StoredConfig;
 
+/// Check if the current process is running in interactive mode.
+/// Returns `true` if stdin is a TTY or if `TV_PROXY_FORCE_INTERACTIVE` is set
+/// (used by e2e tests that pipe stdin to simulate user input).
+pub fn is_interactive() -> bool {
+    io::stdin().is_terminal() || std::env::var("TV_PROXY_FORCE_INTERACTIVE").is_ok()
+}
+
 /// Strip protocol prefix and trailing slashes from a domain string.
 ///
 /// No regex validation is applied here. The result is always used in
@@ -69,7 +76,7 @@ pub fn resolve_config_with_prompts(
     }
 
     // Need to prompt — check TTY
-    if !io::stdin().is_terminal() {
+    if !is_interactive() {
         bail!(
             "Cannot prompt for configuration in non-interactive mode. Set {} environment variable{}.",
             merged.missing.join(", "),

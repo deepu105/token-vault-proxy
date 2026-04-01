@@ -1,5 +1,6 @@
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use super::mock_server::MockAuth0Server;
 
@@ -55,6 +56,53 @@ impl E2eFixture {
             .env("NO_COLOR", "1")
             .output()
             .expect("failed to execute tv-proxy");
+
+        CliResult {
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            exit_code: output.status.code().unwrap_or(-1),
+        }
+    }
+
+    /// Run tv-proxy with piped stdin, fake init scripts on PATH, and
+    /// `TV_PROXY_FORCE_INTERACTIVE=1` for testing the init command flow.
+    /// Does NOT set AUTH0_DOMAIN / CLIENT_ID / CLIENT_SECRET so init must
+    /// discover them via fake scripts.
+    pub fn run_init_with_stdin(&self, args: &[&str], stdin_data: &str) -> CliResult {
+        let fake_scripts =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/e2e/fake_init_scripts");
+        let path = format!(
+            "{}:{}",
+            fake_scripts.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+
+        let mut child = Command::new(assert_cmd::cargo::cargo_bin("tv-proxy"))
+            .args(args)
+            .env_clear()
+            .env("PATH", &path)
+            .env("HOME", std::env::var("HOME").unwrap_or_default())
+            .env("TV_PROXY_AUTH0_BASE_URL", self.mock.uri())
+            .env("TV_PROXY_STORAGE", "file")
+            .env("TV_PROXY_CONFIG_DIR", self.temp_dir.path())
+            .env("TV_PROXY_BROWSER", &self.fake_browser)
+            .env("TV_PROXY_PORT", "0")
+            .env("TV_PROXY_ALLOW_HTTP", "1")
+            .env("TV_PROXY_FORCE_INTERACTIVE", "1")
+            .env("NO_COLOR", "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("failed to spawn tv-proxy");
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(stdin_data.as_bytes()).unwrap();
+        }
+
+        let output = child
+            .wait_with_output()
+            .expect("failed to wait for tv-proxy");
 
         CliResult {
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),

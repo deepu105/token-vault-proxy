@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Fake npx for e2e init tests.
+
+Simulates `npx configure-auth0-token-vault -- --flavor=refresh_token_exchange`.
+Just prints a success message and exits.
+"""
+import sys
+
+print("=== Auth0 Token Vault Configuration ===")
+print("Configuring Token Vault with flavor: refresh_token_exchange")
+print("✓ Token Vault configured successfully")
+print()
+print("Your application Client ID: test-client-id")
+
+sys.exit(0)

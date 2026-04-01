@@ -644,3 +644,78 @@ async fn e2e_connections_fallback_to_local() {
         "should have local connections as fallback"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Init: full happy path via fake auth0/npx scripts
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn e2e_init_full_happy_path() {
+    let fixture = E2eFixture::setup().await;
+
+    // Run init with stdin providing the client_id when prompted.
+    // The fake scripts handle auth0/npx commands.
+    let result = fixture.run_init_with_stdin(&["init"], "test-client-id\n");
+
+    assert_eq!(
+        result.exit_code, 0,
+        "init failed: stdout={}\nstderr={}",
+        result.stdout, result.stderr
+    );
+
+    // Verify setup wizard output
+    assert!(
+        result.stderr.contains("Setup Wizard") || result.stderr.contains("setup wizard"),
+        "should show wizard header: stderr={}",
+        result.stderr
+    );
+    assert!(
+        result.stderr.contains("Callback URLs configured"),
+        "should confirm callback URLs: stderr={}",
+        result.stderr
+    );
+    assert!(
+        result.stderr.contains("Credentials retrieved"),
+        "should confirm credentials: stderr={}",
+        result.stderr
+    );
+    assert!(
+        result.stderr.contains("Setup complete"),
+        "should show completion: stderr={}",
+        result.stderr
+    );
+
+    // After init, verify status shows logged in
+    let status = fixture.run(&["--json", "status"]);
+    assert_eq!(
+        status.exit_code, 0,
+        "status after init failed: stderr={}",
+        status.stderr
+    );
+    let json = parse_json(&status);
+    assert_eq!(json["loggedIn"], true, "should be logged in after init");
+    assert_eq!(json["domain"], "test.auth0.com");
+    assert_eq!(json["clientId"], "test-client-id");
+}
+
+// ---------------------------------------------------------------------------
+// Init: non-interactive rejection
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn e2e_init_non_interactive_fails() {
+    let fixture = E2eFixture::setup().await;
+
+    // Run init WITHOUT TV_PROXY_FORCE_INTERACTIVE — stdin is piped (not a TTY)
+    let result = fixture.run(&["init"]);
+
+    assert_ne!(
+        result.exit_code, 0,
+        "init should fail in non-interactive mode"
+    );
+    assert!(
+        result.stderr.contains("interactive terminal"),
+        "should say it needs a terminal: stderr={}",
+        result.stderr
+    );
+}

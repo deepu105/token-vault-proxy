@@ -272,3 +272,35 @@ fn logout_when_not_logged_in() {
         .success()
         .stdout(predicate::str::contains("Not logged in"));
 }
+
+// ---------------------------------------------------------------------------
+// Init without interactive terminal
+// ---------------------------------------------------------------------------
+
+#[test]
+fn init_non_interactive_fails() {
+    tv_proxy()
+        .arg("init")
+        .env("TV_PROXY_STORAGE", "file")
+        .env(
+            "TV_PROXY_CONFIG_DIR",
+            tempfile::TempDir::new().unwrap().path().as_os_str(),
+        )
+        .env_remove("TV_PROXY_FORCE_INTERACTIVE")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("requires an interactive terminal"));
+}
+
+#[test]
+fn init_help_shows_usage() {
+    tv_proxy()
+        .args(["init", "--help"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("setup wizard")
+                .or(predicate::str::contains("Setup Wizard"))
+                .or(predicate::str::contains("guided setup")),
+        );
+}

@@ -21,7 +21,6 @@ metadata:
     os:
       - darwin
       - linux
-      - windows
     install:
       - id: cargo
         kind: cargo

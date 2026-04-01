@@ -1,4 +1,3 @@
-use std::io::IsTerminal;
 use std::process::{Command, Stdio};
 
 use anyhow::{bail, Context, Result};
@@ -6,7 +5,7 @@ use colored::Colorize;
 
 use super::login;
 use crate::cli::LoginArgs;
-use crate::utils::prompt::{clean_domain, prompt_required};
+use crate::utils::prompt::{clean_domain, is_interactive, prompt_required};
 
 const CALLBACK_PORTS: std::ops::RangeInclusive<u16> = 18484..=18489;
 
@@ -44,11 +43,10 @@ fn run_captured(cmd: &str, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-/// Try to auto-detect the Auth0 tenant domain from the auth0 CLI.
-fn detect_domain() -> Option<String> {
-    let output = run_captured("auth0", &["tenants", "list", "--json"]).ok()?;
-    let tenants: serde_json::Value = serde_json::from_str(&output).ok()?;
-
+/// Parse a single tenant domain from `auth0 tenants list --json` output.
+/// Returns `Some(domain)` when exactly one tenant exists, `None` otherwise.
+pub(crate) fn parse_single_tenant(json_str: &str) -> Option<String> {
+    let tenants: serde_json::Value = serde_json::from_str(json_str).ok()?;
     let arr = tenants.as_array()?;
     if arr.len() == 1 {
         return arr[0]["name"]
@@ -56,7 +54,28 @@ fn detect_domain() -> Option<String> {
             .or_else(|| arr[0]["domain"].as_str())
             .map(|s| s.to_string());
     }
+    None
+}
 
+/// Parse the client_secret from `auth0 apps show --reveal-secrets --json` output.
+pub(crate) fn parse_app_secret(json_str: &str) -> Option<String> {
+    let json: serde_json::Value = serde_json::from_str(json_str).ok()?;
+    json["client_secret"]
+        .as_str()
+        .or_else(|| json["clientSecret"].as_str())
+        .map(|s| s.to_string())
+}
+
+/// Try to auto-detect the Auth0 tenant domain from the auth0 CLI.
+fn detect_domain() -> Option<String> {
+    let output = run_captured("auth0", &["tenants", "list", "--json"]).ok()?;
+    if let Some(domain) = parse_single_tenant(&output) {
+        return Some(domain);
+    }
+
+    // Multiple or zero tenants — try interactive selection
+    let tenants: serde_json::Value = serde_json::from_str(&output).ok()?;
+    let arr = tenants.as_array()?;
     if arr.len() > 1 {
         eprintln!("\nMultiple tenants detected:");
         for (i, t) in arr.iter().enumerate() {
@@ -85,15 +104,9 @@ fn get_app_credentials(client_id: &str) -> Result<(String, String)> {
         "auth0",
         &["apps", "show", client_id, "--reveal-secrets", "--json"],
     ) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&output) {
-            let secret = json["client_secret"]
-                .as_str()
-                .or_else(|| json["clientSecret"].as_str());
-
-            let domain = detect_domain();
-
-            if let (Some(domain), Some(secret)) = (domain, secret) {
-                return Ok((clean_domain(&domain), secret.to_string()));
+        if let Some(secret) = parse_app_secret(&output) {
+            if let Some(domain) = detect_domain() {
+                return Ok((clean_domain(&domain), secret));
             }
         }
     }
@@ -114,7 +127,7 @@ fn get_app_credentials(client_id: &str) -> Result<(String, String)> {
 pub async fn run(browser: Option<String>, port: Option<u16>, json_mode: bool) -> Result<()> {
     eprintln!("{}\n", "Auth0 Token Vault Proxy — Setup Wizard".bold());
 
-    if !std::io::stdin().is_terminal() {
+    if !is_interactive() {
         bail!("The init command requires an interactive terminal.");
     }
 
@@ -238,4 +251,87 @@ pub async fn run(browser: Option<String>, port: Option<u16>, json_mode: bool) ->
     eprintln!("     tv-proxy status");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- parse_single_tenant ---
+
+    #[test]
+    fn parse_single_tenant_one_entry() {
+        let json = r#"[{"name": "my-tenant.auth0.com"}]"#;
+        assert_eq!(
+            parse_single_tenant(json),
+            Some("my-tenant.auth0.com".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_single_tenant_domain_field() {
+        let json = r#"[{"domain": "my-tenant.eu.auth0.com"}]"#;
+        assert_eq!(
+            parse_single_tenant(json),
+            Some("my-tenant.eu.auth0.com".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_single_tenant_name_preferred_over_domain() {
+        let json = r#"[{"name": "a.auth0.com", "domain": "b.auth0.com"}]"#;
+        assert_eq!(parse_single_tenant(json), Some("a.auth0.com".to_string()));
+    }
+
+    #[test]
+    fn parse_single_tenant_empty_array() {
+        assert_eq!(parse_single_tenant("[]"), None);
+    }
+
+    #[test]
+    fn parse_single_tenant_multiple_returns_none() {
+        let json = r#"[{"name": "a.auth0.com"}, {"name": "b.auth0.com"}]"#;
+        assert_eq!(parse_single_tenant(json), None);
+    }
+
+    #[test]
+    fn parse_single_tenant_invalid_json() {
+        assert_eq!(parse_single_tenant("not json"), None);
+    }
+
+    #[test]
+    fn parse_single_tenant_not_array() {
+        assert_eq!(parse_single_tenant(r#"{"name": "x"}"#), None);
+    }
+
+    // --- parse_app_secret ---
+
+    #[test]
+    fn parse_app_secret_standard_field() {
+        let json = r#"{"client_id": "abc", "client_secret": "super-secret"}"#;
+        assert_eq!(parse_app_secret(json), Some("super-secret".to_string()));
+    }
+
+    #[test]
+    fn parse_app_secret_camel_case() {
+        let json = r#"{"clientId": "abc", "clientSecret": "camel-secret"}"#;
+        assert_eq!(parse_app_secret(json), Some("camel-secret".to_string()));
+    }
+
+    #[test]
+    fn parse_app_secret_missing() {
+        let json = r#"{"client_id": "abc", "name": "My App"}"#;
+        assert_eq!(parse_app_secret(json), None);
+    }
+
+    #[test]
+    fn parse_app_secret_invalid_json() {
+        assert_eq!(parse_app_secret("not json"), None);
+    }
+
+    #[test]
+    fn parse_app_secret_null_value() {
+        let json = r#"{"client_secret": null}"#;
+        assert_eq!(parse_app_secret(json), None);
+    }
 }

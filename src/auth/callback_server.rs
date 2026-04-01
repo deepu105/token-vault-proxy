@@ -9,8 +9,8 @@ use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-const PORT_RANGE_START: u16 = 18484;
-const PORT_RANGE_END: u16 = 18489;
+pub const PORT_RANGE_START: u16 = 18484;
+pub const PORT_RANGE_END: u16 = 18489;
 
 /// A local HTTP server that waits for an OAuth callback.
 ///

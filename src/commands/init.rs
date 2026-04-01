@@ -4,10 +4,11 @@ use anyhow::{bail, Context, Result};
 use colored::Colorize;
 
 use super::login;
+use crate::auth::callback_server::{PORT_RANGE_END, PORT_RANGE_START};
 use crate::cli::LoginArgs;
 use crate::utils::prompt::{clean_domain, is_interactive, prompt_required};
 
-const CALLBACK_PORTS: std::ops::RangeInclusive<u16> = 18484..=18489;
+const CALLBACK_PORTS: std::ops::RangeInclusive<u16> = PORT_RANGE_START..=PORT_RANGE_END;
 
 fn is_command_available(cmd: &str) -> bool {
     let check = if cfg!(windows) { "where" } else { "which" };

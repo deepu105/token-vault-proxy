@@ -9,9 +9,16 @@ Unlike service-specific CLIs like [Auth0 Token Vault CLI](https://github.com/dee
 ### Prerequisites
 
 - An [Auth0 Account](https://auth0.com/signup?onboard_app=auth_for_aa&ocid=701KZ000000cXXxYAM-aPA4z0000008OZeGAM)
+- [Auth0 CLI](https://github.com/auth0/auth0-cli) installed and logged in
 - At least one [connection](https://auth0.com/ai/docs/integrations/overview) configured (e.g. [Google](https://auth0.com/ai/docs/integrations/google))
 
-### Guided Setup
+### Quickstart
+
+Install the `tv-proxy` CLI:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/deepu105/token-vault-proxy/main/deployment/install.sh | bash
+```
 
 Run the interactive setup wizard — it installs prerequisites, configures your Auth0 tenant, and logs you in:
 
@@ -19,110 +26,64 @@ Run the interactive setup wizard — it installs prerequisites, configures your 
 tv-proxy init
 ```
 
-### Manual Setup
-
-If you prefer to configure things manually:
-
-#### 1. Login
+After setup, connect providers and start making API calls:
 
 ```bash
-tv-proxy login
-```
-
-You'll be prompted for your Auth0 domain, client ID, and client secret (see [Auth0 Tenant Setup](#auth0-tenant-setup) below), then a browser window opens for authentication. You can also pass them as flags:
-
-```bash
-tv-proxy login --domain your-tenant.auth0.com --client-id abc123 --client-secret xyz789
-```
-
-Or set environment variables to skip the prompts entirely:
-
-```bash
-export AUTH0_DOMAIN=your-tenant.auth0.com
-export AUTH0_CLIENT_ID=abc123
-export AUTH0_CLIENT_SECRET=xyz789
-tv-proxy login
-```
-
-#### 2. Connect a provider
-
-```bash
+# Connect providers
 tv-proxy connect google
 tv-proxy connect slack
 tv-proxy connect github
-```
-
-#### 3. Make an authenticated API call
-
-```bash
+# Make authenticated API calls
 tv-proxy fetch gmail https://gmail.googleapis.com/gmail/v1/users/me/messages
 tv-proxy fetch github https://api.github.com/user
 tv-proxy fetch slack https://slack.com/api/conversations.list
 ```
 
-The `Authorization: Bearer <token>` header is injected automatically.
+For manual setup instructions, see the [Manual Setup](#manual-setup) section below.
 
-## Manual Auth0 Tenant Setup
+## Agent Integration
 
-### Prerequisites
+The CLI is designed as a skill for [AgentSkills-compatible](https://agentskills.io/) AI agents (OpenClaw, Claude Code, etc.).
 
-- An [Auth0 Account](https://auth0.com/signup?onboard_app=auth_for_aa&ocid=701KZ000000cXXxYAM-aPA4z0000008OZeGAM)
-- [Auth0 CLI](https://github.com/auth0/auth0-cli) installed and logged in
-- At least one [connection](https://auth0.com/ai/docs/integrations/overview) configured (e.g. [Google](https://auth0.com/ai/docs/integrations/google))
+### Agent Skills
 
-### Install the Auth0 CLI
+The CLI ships with an [Agent Skills](https://agentskills.io) manifest that enables automatic discovery in supported agent frameworks.
 
-```bash
-# macOS
-brew tap auth0/auth0-cli && brew install auth0
+**Claude Code plugin marketplace:** Install the skill directly in Claude Code:
 
-# Other platforms — see https://github.com/auth0/auth0-cli
+```
+/plugin marketplace add deepu105/token-vault-proxy
 ```
 
-### Configure Token Vault
+Then browse and install:
 
-Run the interactive setup wizard. It logs you into Auth0 CLI then creates and configures an Auth0 application with Token Vault, My Account API, MRRT, and client grants — everything that `tv-proxy` needs:
-
-```bash
-npx configure-auth0-token-vault
+```
+/plugin install auth0-token-vault-proxy@auth0-token-vault-proxy
 ```
 
-1. When asked, **How would you like to configure the application?**, select **Create a new application**. If you already have an application you'd like to use, select **Use an existing application** and follow the prompts to set it up for Token Vault.
-2. If asked, **Select application type**, choose **Regular Web Application**.
-3. When asked, **Which Token Vault configuration do you need?**, select **Refresh Token Exchange**.
-
-The wizard will:
-
-- Configure the Regular Web Application with the necessary settings for Token Vault
-- Enable the Token Vault grant type
-- Activate the My Account API with Connected Accounts scopes
-- Create the necessary client grants
-- Configure Multi-Resource Refresh Token (MRRT) policies
-- Enable your social connections on the application
-
-Note the **Client ID** from the output — you'll need it for `tv-proxy login`.
-
-> **Tip:** The wizard is idempotent — safe to re-run if you need to update the configuration.
-
-### Configure callback URLs
-
-After running the wizard, configure your application's callback and logout URLs for `tv-proxy` using the Auth0 CLI. Replace `<APP_ID>` with the Client ID from the previous step:
+**ClawHub (OpenClaw skill registry):** Install the skill via [ClawHub](https://clawhub.ai):
 
 ```bash
-auth0 apps update <APP_ID> \
-  --callbacks "http://127.0.0.1:18484/callback,http://127.0.0.1:18485/callback,http://127.0.0.1:18486/callback,http://127.0.0.1:18487/callback,http://127.0.0.1:18488/callback,http://127.0.0.1:18489/callback" \
-  --logout-urls "http://127.0.0.1:18484,http://127.0.0.1:18485,http://127.0.0.1:18486,http://127.0.0.1:18487,http://127.0.0.1:18488,http://127.0.0.1:18489"
+npx clawhub@latest install auth0-token-vault-proxy
 ```
 
-If you plan to use a custom `--port`, add that port's URLs as well.
-
-### Get Client Secret
-
-Retrieve your application's client secret (needed during `tv-proxy login`):
+**Global installation (manual):** For use outside this repo, install `tv-proxy` and copy the skill:
 
 ```bash
-auth0 apps show <APP_ID> --reveal-secrets
+# Build and install
+cargo install --path .
+
+# Claude Code
+cp -r skills/auth0-token-vault-proxy ~/.claude/skills/
+
+# OpenClaw
+cp -r skills/auth0-token-vault-proxy ~/.openclaw/skills/
 ```
+
+**In-project discovery (automatic):** When working in this repo, agents discover the skill automatically:
+
+- **OpenClaw:** via `skills/auth0-token-vault-proxy/SKILL.md`
+- **Claude Code:** via `.claude/skills/auth0-token-vault-proxy/SKILL.md` (symlink)
 
 ## Installation
 
@@ -146,13 +107,13 @@ VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/deepu105/token-vault
 
 Download the latest release for your platform from [GitHub Releases](https://github.com/deepu105/token-vault-proxy/releases):
 
-| Platform      | Binary                       |
-| ------------- | ---------------------------- |
-| Linux x64     | `tv-proxy-linux-x64`        |
-| Linux arm64   | `tv-proxy-linux-arm64`       |
-| macOS x64     | `tv-proxy-macos-x64`        |
-| macOS arm64   | `tv-proxy-macos-arm64`       |
-| Windows x64   | `tv-proxy-windows-x64.exe`  |
+| Platform    | Binary                     |
+| ----------- | -------------------------- |
+| Linux x64   | `tv-proxy-linux-x64`       |
+| Linux arm64 | `tv-proxy-linux-arm64`     |
+| macOS x64   | `tv-proxy-macos-x64`       |
+| macOS arm64 | `tv-proxy-macos-arm64`     |
+| Windows x64 | `tv-proxy-windows-x64.exe` |
 
 ### Build from source
 
@@ -233,15 +194,15 @@ tv-proxy connect github --allowed-domains "ghcr.io,uploads.github.com"
 
 ### Exit Codes
 
-| Code | Meaning                                                   |
-| ---- | --------------------------------------------------------- |
-| 0    | Success                                                   |
-| 1    | General error                                             |
-| 2    | Invalid input / missing required flag                     |
-| 3    | Authentication required (run `tv-proxy login`)            |
+| Code | Meaning                                                    |
+| ---- | ---------------------------------------------------------- |
+| 0    | Success                                                    |
+| 1    | General error                                              |
+| 2    | Invalid input / missing required flag                      |
+| 3    | Authentication required (run `tv-proxy login`)             |
 | 4    | Authorization required (run `tv-proxy connect <provider>`) |
-| 5    | Service error (upstream API failure)                      |
-| 6    | Network error                                             |
+| 5    | Service error (upstream API failure)                       |
+| 6    | Network error                                              |
 
 ## Configuration
 
@@ -251,64 +212,92 @@ On first run, `tv-proxy login` prompts for the required values and persists them
 
 ### Environment Variables
 
-| Variable             | Description                                              |
-| -------------------- | -------------------------------------------------------- |
-| `AUTH0_DOMAIN`       | Auth0 tenant domain                                      |
-| `AUTH0_CLIENT_ID`    | Auth0 application client ID                              |
-| `AUTH0_CLIENT_SECRET`| Auth0 application client secret                          |
-| `AUTH0_AUDIENCE`     | API audience (optional)                                  |
-| `TV_PROXY_STORAGE`   | Credential backend: `keyring` (default) or `file`        |
-| `TV_PROXY_CONFIG_DIR`| Override config directory (default: `~/.tv-proxy/`)      |
-| `TV_PROXY_BROWSER`   | Browser to open for auth flows (e.g. `firefox`)          |
-| `TV_PROXY_PORT`      | Port for the local OAuth callback server                 |
-
-## Agent Integration
-
-The CLI is designed as a skill for [AgentSkills-compatible](https://agentskills.io/) AI agents (OpenClaw, Claude Code, etc.).
-
-### Agent Skills
-
-The CLI ships with an [Agent Skills](https://agentskills.io) manifest that enables automatic discovery in supported agent frameworks.
-
-**Claude Code plugin marketplace:** Install the skill directly in Claude Code:
-
-```
-/plugin marketplace add deepu105/token-vault-proxy
-```
-
-Then browse and install:
-
-```
-/plugin install auth0-token-vault-proxy@auth0-token-vault-proxy
-```
-
-**ClawHub (OpenClaw skill registry):** Install the skill via [ClawHub](https://clawhub.ai):
-
-```bash
-npx clawhub@latest install auth0-token-vault-proxy
-```
-
-**Global installation (manual):** For use outside this repo, install `tv-proxy` and copy the skill:
-
-```bash
-# Build and install
-cargo install --path .
-
-# Claude Code
-cp -r skills/auth0-token-vault-proxy ~/.claude/skills/
-
-# OpenClaw
-cp -r skills/auth0-token-vault-proxy ~/.openclaw/skills/
-```
-
-**In-project discovery (automatic):** When working in this repo, agents discover the skill automatically:
-
-- **OpenClaw:** via `skills/auth0-token-vault-proxy/SKILL.md`
-- **Claude Code:** via `.claude/skills/auth0-token-vault-proxy/SKILL.md` (symlink)
+| Variable              | Description                                         |
+| --------------------- | --------------------------------------------------- |
+| `AUTH0_DOMAIN`        | Auth0 tenant domain                                 |
+| `AUTH0_CLIENT_ID`     | Auth0 application client ID                         |
+| `AUTH0_CLIENT_SECRET` | Auth0 application client secret                     |
+| `AUTH0_AUDIENCE`      | API audience (optional)                             |
+| `TV_PROXY_STORAGE`    | Credential backend: `keyring` (default) or `file`   |
+| `TV_PROXY_CONFIG_DIR` | Override config directory (default: `~/.tv-proxy/`) |
+| `TV_PROXY_BROWSER`    | Browser to open for auth flows (e.g. `firefox`)     |
+| `TV_PROXY_PORT`       | Port for the local OAuth callback server            |
 
 ## Credential Storage
 
 Credentials are stored in the OS keyring by default with a fallback to `~/.tv-proxy/credentials.json` with restricted file permissions (0600). Token values are never logged or displayed in CLI output.
+
+## Manual Setup
+
+> **Tip:** The `tv-proxy init` command automates all of these steps. Use manual setup only if you need more control.
+
+### Prerequisites
+
+- An [Auth0 Account](https://auth0.com/signup?onboard_app=auth_for_aa&ocid=701KZ000000cXXxYAM-aPA4z0000008OZeGAM)
+- [Auth0 CLI](https://github.com/auth0/auth0-cli) installed and logged in
+- At least one [connection](https://auth0.com/ai/docs/integrations/overview) configured (e.g. [Google](https://auth0.com/ai/docs/integrations/google))
+
+### Install the Auth0 CLI
+
+```bash
+# macOS
+brew tap auth0/auth0-cli && brew install auth0
+
+# Other platforms — see https://github.com/auth0/auth0-cli
+```
+
+### Configure Token Vault
+
+Run the interactive setup wizard. It logs you into Auth0 CLI then creates and configures an Auth0 application with Token Vault, My Account API, MRRT, and client grants — everything that `tv-proxy` needs:
+
+```bash
+npx configure-auth0-token-vault
+```
+
+1. When asked, **How would you like to configure the application?**, select **Create a new application**. If you already have an application you'd like to use, select **Use an existing application** and follow the prompts to set it up for Token Vault.
+2. If asked, **Select application type**, choose **Regular Web Application**.
+3. When asked, **Which Token Vault configuration do you need?**, select **Refresh Token Exchange**.
+
+The wizard will:
+
+- Configure the Regular Web Application with the necessary settings for Token Vault
+- Enable the Token Vault grant type
+- Activate the My Account API with Connected Accounts scopes
+- Create the necessary client grants
+- Configure Multi-Resource Refresh Token (MRRT) policies
+- Enable your social connections on the application
+
+Note the **Client ID** from the output — you'll need it for `tv-proxy login`.
+
+> **Tip:** The wizard is idempotent — safe to re-run if you need to update the configuration.
+
+### Configure callback URLs
+
+After running the wizard, configure your application's callback and logout URLs for `tv-proxy` using the Auth0 CLI. Replace `<APP_ID>` with the Client ID from the previous step:
+
+```bash
+auth0 apps update <APP_ID> \
+  --callbacks "http://127.0.0.1:18484/callback,http://127.0.0.1:18485/callback,http://127.0.0.1:18486/callback,http://127.0.0.1:18487/callback,http://127.0.0.1:18488/callback,http://127.0.0.1:18489/callback" \
+  --logout-urls "http://127.0.0.1:18484,http://127.0.0.1:18485,http://127.0.0.1:18486,http://127.0.0.1:18487,http://127.0.0.1:18488,http://127.0.0.1:18489"
+```
+
+If you plan to use a custom `--port`, add that port's URLs as well.
+
+### Get Client Secret
+
+Retrieve your application's client secret (needed during `tv-proxy login`):
+
+```bash
+auth0 apps show <APP_ID> --reveal-secrets
+```
+
+If you prefer manual setup over `tv-proxy init`:
+
+### 1. Login
+
+```bash
+tv-proxy login
+```
 
 ## Development
 

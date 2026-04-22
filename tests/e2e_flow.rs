@@ -670,8 +670,8 @@ async fn e2e_init_full_happy_path() {
         result.stderr
     );
     assert!(
-        result.stderr.contains("Callback URLs configured"),
-        "should confirm callback URLs: stderr={}",
+        result.stderr.contains("Detected Client ID"),
+        "should auto-detect Client ID: stderr={}",
         result.stderr
     );
     assert!(

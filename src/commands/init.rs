@@ -1,11 +1,15 @@
+use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
+use std::thread;
 
 use anyhow::{bail, Context, Result};
 use colored::Colorize;
+use serde_json::json;
 
 use super::login;
 use crate::auth::callback_server::{PORT_RANGE_END, PORT_RANGE_START};
 use crate::cli::LoginArgs;
+use crate::utils::output::output;
 use crate::utils::prompt::{clean_domain, is_interactive, prompt_required};
 
 const CALLBACK_PORTS: std::ops::RangeInclusive<u16> = PORT_RANGE_START..=PORT_RANGE_END;
@@ -30,6 +34,87 @@ fn run_inherited(cmd: &str, args: &[&str]) -> Result<bool> {
         .status()
         .with_context(|| format!("Failed to run: {} {}", cmd, args.join(" ")))?;
     Ok(status.success())
+}
+
+/// Run a command with inherited stdin but captured stdout/stderr.
+/// Each line of output is tee'd to the real stdout/stderr so the user sees it
+/// in real time, while the full output is collected and returned.
+fn run_inherited_captured(cmd: &str, args: &[&str]) -> Result<(bool, String)> {
+    let mut child = Command::new(cmd)
+        .args(args)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("Failed to run: {} {}", cmd, args.join(" ")))?;
+
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+
+    let stdout_handle = thread::spawn(move || {
+        let mut collected = Vec::new();
+        let reader = BufReader::new(stdout);
+        let mut out = std::io::stdout().lock();
+        for line in reader.lines().map_while(Result::ok) {
+            let _ = writeln!(out, "{line}");
+            collected.push(line);
+        }
+        collected.join("\n")
+    });
+
+    let stderr_handle = thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        let mut err = std::io::stderr().lock();
+        for line in reader.lines().map_while(Result::ok) {
+            let _ = writeln!(err, "{line}");
+        }
+    });
+
+    let status = child.wait()?;
+    let stdout_output = stdout_handle.join().unwrap_or_default();
+    let _ = stderr_handle.join();
+
+    Ok((status.success(), stdout_output))
+}
+
+/// Strip ANSI escape sequences from a string.
+pub(crate) fn strip_ansi(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut result = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+            // Skip ESC [ ... (final byte is 0x40-0x7E)
+            i += 2;
+            while i < bytes.len() && !(0x40..=0x7E).contains(&bytes[i]) {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1; // skip the final byte
+            }
+        } else {
+            result.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&result).to_string()
+}
+
+/// Parse the Client ID from `configure-auth0-token-vault` output.
+/// Looks for "Client ID:" followed by a non-whitespace token.
+/// Strips ANSI escape codes first since the output may come from a PTY.
+pub(crate) fn parse_client_id(output: &str) -> Option<String> {
+    let clean = strip_ansi(output);
+    // Case-insensitive search for "Client ID:" then grab next token
+    let lower = clean.to_lowercase();
+    let idx = lower.find("client id:")?;
+    let after = &clean[idx + "client id:".len()..];
+    let token = after.split_whitespace().next()?;
+    if token.is_empty() {
+        None
+    } else {
+        Some(token.to_string())
+    }
 }
 
 fn run_captured(cmd: &str, args: &[&str]) -> Result<String> {
@@ -164,26 +249,6 @@ pub async fn run(browser: Option<String>, port: Option<u16>, json_mode: bool) ->
     eprintln!("The configuration wizard will guide you through setting up Auth0");
     eprintln!("Token Vault for your tenant.\n");
 
-    let ok = run_inherited(
-        "npx",
-        &[
-            "configure-auth0-token-vault",
-            "--",
-            "--flavor=refresh_token_exchange",
-        ],
-    )?;
-
-    if !ok {
-        bail!("Token Vault configuration failed. Fix the issue and run `tv-proxy init` again.");
-    }
-
-    // Step 2: Get Client ID
-    eprintln!();
-    let client_id = prompt_required("Enter the Client ID from the output above: ")?;
-
-    // Step 3: Update callback URLs
-    eprintln!("\n{}", "Step 2: Configure callback URLs".bold());
-
     let callbacks = CALLBACK_PORTS
         .map(|p| format!("http://127.0.0.1:{p}/callback"))
         .collect::<Vec<_>>()
@@ -193,32 +258,35 @@ pub async fn run(browser: Option<String>, port: Option<u16>, json_mode: bool) ->
         .collect::<Vec<_>>()
         .join(",");
 
-    let ok = run_inherited(
-        "auth0",
+    let callback_arg = format!("--callback-urls={callbacks}");
+    let logout_arg = format!("--logout-urls={logout_urls}");
+
+    let (ok, config_output) = run_inherited_captured(
+        "npx",
         &[
-            "apps",
-            "update",
-            &client_id,
-            "--callbacks",
-            &callbacks,
-            "--logout-urls",
-            &logout_urls,
+            "configure-auth0-token-vault",
+            "--",
+            "--flavor=refresh_token_exchange",
+            &callback_arg,
+            &logout_arg,
         ],
     )?;
 
     if !ok {
-        bail!(
-            "Failed to update callback URLs. Run manually:\n  \
-             auth0 apps update {} --callbacks \"{}\" --logout-urls \"{}\"",
-            client_id,
-            callbacks,
-            logout_urls
-        );
+        bail!("Token Vault configuration failed. Fix the issue and run `tv-proxy init` again.");
     }
-    eprintln!("{} Callback URLs configured.\n", "✓".green());
 
-    // Step 4: Retrieve client secret and domain
-    eprintln!("{}", "Step 3: Retrieve credentials".bold());
+    // Auto-detect Client ID from wizard output, fall back to prompt
+    eprintln!();
+    let client_id = if let Some(id) = parse_client_id(&config_output) {
+        eprintln!("{} Detected Client ID: {id}", "✓".green());
+        id
+    } else {
+        prompt_required("Enter the Client ID from the output above: ")?
+    };
+
+    // Step 2: Retrieve client secret and domain
+    eprintln!("\n{}", "Step 2: Retrieve credentials".bold());
 
     let (domain, client_secret) = get_app_credentials(&client_id)?;
 
@@ -226,8 +294,8 @@ pub async fn run(browser: Option<String>, port: Option<u16>, json_mode: bool) ->
     eprintln!("  Domain:    {}", domain);
     eprintln!("  Client ID: {}\n", client_id);
 
-    // Step 5: Login
-    eprintln!("{}", "Step 4: Authenticate".bold());
+    // Step 3: Login
+    eprintln!("{}", "Step 3: Authenticate".bold());
 
     let login_args = LoginArgs {
         domain: Some(domain),
@@ -239,7 +307,7 @@ pub async fn run(browser: Option<String>, port: Option<u16>, json_mode: bool) ->
 
     login::run(login_args, browser, port, json_mode).await?;
 
-    // Step 6: Next steps
+    // Next steps
     eprintln!("\n{}\n", "🎉 Setup complete!".bold());
     eprintln!("{}", "Next steps:".bold());
     eprintln!("  {} Connect a provider:", "1.".dimmed());
@@ -250,6 +318,8 @@ pub async fn run(browser: Option<String>, port: Option<u16>, json_mode: bool) ->
     eprintln!("     tv-proxy fetch gmail https://gmail.googleapis.com/gmail/v1/users/me/messages");
     eprintln!("  {} Check status:", "3.".dimmed());
     eprintln!("     tv-proxy status");
+
+    output(json!({"status": "setup_complete"}), "", json_mode);
 
     Ok(())
 }
@@ -334,5 +404,54 @@ mod tests {
     fn parse_app_secret_null_value() {
         let json = r#"{"client_secret": null}"#;
         assert_eq!(parse_app_secret(json), None);
+    }
+
+    // --- strip_ansi ---
+
+    #[test]
+    fn strip_ansi_removes_color_codes() {
+        assert_eq!(strip_ansi("\x1b[32m✓\x1b[0m Done"), "✓ Done");
+    }
+
+    #[test]
+    fn strip_ansi_noop_for_plain_text() {
+        assert_eq!(strip_ansi("plain text"), "plain text");
+    }
+
+    #[test]
+    fn strip_ansi_removes_bold_and_reset() {
+        assert_eq!(strip_ansi("\x1b[1mBold\x1b[0m"), "Bold");
+    }
+
+    // --- parse_client_id ---
+
+    #[test]
+    fn parse_client_id_from_output() {
+        let output = "Your application Client ID: abc123def456\nDone.";
+        assert_eq!(parse_client_id(output), Some("abc123def456".to_string()));
+    }
+
+    #[test]
+    fn parse_client_id_with_ansi() {
+        let output = "\x1b[1mClient ID:\x1b[0m abc123def456";
+        assert_eq!(parse_client_id(output), Some("abc123def456".to_string()));
+    }
+
+    #[test]
+    fn parse_client_id_case_insensitive() {
+        let output = "client id: myClientId789";
+        assert_eq!(parse_client_id(output), Some("myClientId789".to_string()));
+    }
+
+    #[test]
+    fn parse_client_id_not_found() {
+        let output = "Setup complete. No ID here.";
+        assert_eq!(parse_client_id(output), None);
+    }
+
+    #[test]
+    fn parse_client_id_empty_after_label() {
+        let output = "Client ID:";
+        assert_eq!(parse_client_id(output), None);
     }
 }
